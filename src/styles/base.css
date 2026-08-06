@@ -40,21 +40,37 @@ html[data-theme='dark'] body {
   overflow: hidden;
 }
 
-/* SIDEBAR */
+/* SIDEBAR
+   .sidebar = wrapper luar: hanya mengatur lebar/posisi (sticky, collapse),
+   TIDAK overflow-hidden, supaya tombol collapse yang sengaja "nongol" keluar
+   dari garis batas tidak ikut ter-clip.
+   .sidebar-panel = kotak visual yang sebenarnya (background, border, scroll
+   konten nav). Dipisah dari wrapper supaya scroll-nya tidak memotong tombol. */
 .sidebar {
   width: 230px;
-  background: var(--bg2);
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
   flex-shrink: 0;
   position: sticky;
   top: 0;
   height: 100vh;
-  overflow-y: auto;
-  overscroll-behavior: contain;
   transition: width 0.18s ease;
   z-index: 150;
+}
+.sidebar-panel {
+  width: 100%;
+  height: 100%;
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* Sembunyikan scrollbar bawaan browser (muncul sebagai bar abu-abu memanjang
+     di sepanjang tepi sidebar) — scroll tetap jalan, cuma indikatornya disembunyikan. */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge lama */
+}
+.sidebar-panel::-webkit-scrollbar {
+  display: none; /* Chrome/Safari/Edge baru */
 }
 .sidebar.collapsed {
   width: 64px;
@@ -75,11 +91,15 @@ html[data-theme='dark'] body {
   gap: 0;
 }
 
+/* Tombol ciutkan/lebarkan sidebar: diletakkan sebagai anak langsung .sidebar
+   (wrapper, bukan .sidebar-panel yang overflow-y:auto) supaya tidak ter-clip.
+   Dikunci dekat bagian atas, persis di garis batas sidebar/konten — separuh
+   lingkaran di dalam sidebar, separuh di luar. */
 #sidebar-collapse-btn {
   position: absolute;
-  bottom: 0;
-  right: 23px;
-  transform: translateY(50%);
+  top: 62px;
+  right: -13px;
+  transform: translateY(-50%);
   width: 26px;
   height: 26px;
   border-radius: 50%;
@@ -92,16 +112,18 @@ html[data-theme='dark'] body {
   cursor: pointer;
   z-index: 200;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
-  transition: background 0.13s;
-  padding: 0;
+  transition: background 0.13s, transform 0.13s;
 }
 #sidebar-collapse-btn:hover {
   filter: brightness(0.9);
-  transform: translateY(50%) scale(1.08);
+  transform: translateY(-50%) scale(1.08);
 }
 
 #sidebar-collapse-icon {
   transition: transform 0.18s ease;
+}
+.sidebar.collapsed #sidebar-collapse-icon {
+  transform: rotate(180deg);
 }
 
 .main {
@@ -112,7 +134,9 @@ html[data-theme='dark'] body {
 }
 
 .logo {
-  padding: 22px 20px 16px;
+  /* Padding kanan dilebihkan dari kiri supaya logo tidak "mepet"/berhimpitan
+     dengan tombol collapse yang mengambang di tepi kanan sidebar. */
+  padding: 22px 28px 16px 20px;
   border-bottom: 1px solid var(--border);
   position: relative;
 }
@@ -121,6 +145,9 @@ html[data-theme='dark'] body {
   width: 100%;
   height: auto;
   display: block;
+  /* Dipepetkan ke kanan (bukan center) supaya logo dekat dengan tombol
+     collapse yang mengambang di tepi kanan sidebar. */
+  margin: 0 0 0 auto;
 }
 
 .nav {
@@ -231,21 +258,107 @@ html[data-theme='dark'] body {
   word-break: break-all;
 }
 
+/* Tombol "Hubungi Helpdesk" di footer sidebar */
+.sf-help-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 8px 10px;
+  margin-bottom: 12px;
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  color: var(--muted);
+  font-family: var(--font-b);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.13s;
+}
+.sf-help-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(26, 110, 60, 0.07);
+}
+
+/* Kartu profil di footer sidebar: avatar + nama/role + tombol keluar */
+.sf-profile-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 10px;
+  background: var(--bg3);
+}
+.sf-profile-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.sf-profile-body {
+  flex: 1;
+  min-width: 0;
+}
+.sf-profile-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sf-profile-role {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sf-profile-logout {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  border: 1px solid var(--border2);
+  background: transparent;
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.13s;
+}
+.sf-profile-logout:hover {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
 /* ══ FIXED LOGO (login) & WELCOME BADGE (setelah login) — pojok kanan atas ══ */
 .sgn-fixed-logo {
   position: fixed;
-  top: 9px;
-  right: 18px;
-  height: 34px;
+  top: 14px;
+  right: 22px;
+  height: 56px;
   width: auto;
   z-index: 5200;
   pointer-events: none;
 }
 @media (max-width: 768px) {
   .sgn-fixed-logo {
-    height: 24px !important;
-    top: 6px !important;
-    right: 10px !important;
+    height: 38px !important;
+    top: 8px !important;
+    right: 12px !important;
   }
 }
 .app-welcome-badge {
@@ -521,9 +634,12 @@ html, body {
     bottom: 0;
     width: 78vw;
     max-width: 280px;
+    height: 100%;
     z-index: 400;
     transform: translateX(-100%);
     transition: transform 0.25s ease;
+  }
+  .sidebar-panel {
     box-shadow: 2px 0 24px rgba(0, 0, 0, 0.3);
   }
   .sidebar.mobile-open {
@@ -546,6 +662,15 @@ html, body {
     left: 9px;
     width: 36px;
     height: 36px;
+  }
+
+  /* Tombol ciutkan/lebarkan (chevron) khusus untuk mode desktop (sidebar
+     statis di kiri). Di mobile sidebar-nya berupa drawer overlay yang
+     dibuka/ditutup lewat #mobile-menu-btn, jadi konsep "minimize ke ikon"
+     tidak relevan — tombol ini disembunyikan supaya tidak nongol
+     menimpa konten halaman di belakangnya saat drawer/sidebar tampil. */
+  #sidebar-collapse-btn {
+    display: none;
   }
 
   /* Badge "Selamat Datang" diciutkan jadi avatar saja di mobile supaya tidak
@@ -832,6 +957,7 @@ tbody tr:hover td { background: var(--bg3); }
   #db-cli-scroll, #tp-career-scroll { -webkit-overflow-scrolling: touch; }
 }
 
+
 .btn-logout {
-  margin-bottom: 100px;
+  margin-bottom: 70px;
 }

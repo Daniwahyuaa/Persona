@@ -6,7 +6,7 @@ import {
   getFormulaWeights,
   buildCandidateProfile,
   scoreCandidates,
-  SCORE_COMPONENTS,
+  getScoreComponents,
 } from '../../lib/talentPointSystemApi.js'
 import { avatarColor, initials } from '../../lib/avatar.js'
 
@@ -265,8 +265,9 @@ function CompareTable({ profiles }) {
 // ════════════════════════════════════════
 // HASIL ANALISIS (leaderboard + rincian + rekomendasi)
 // ════════════════════════════════════════
-function AnalysisResult({ ranked }) {
+function AnalysisResult({ ranked, formulaWeights }) {
   const top = ranked[0]
+  const components = getScoreComponents(formulaWeights)
   const gap = ranked.length > 1 ? top.totalScore - ranked[ranked.length - 1].totalScore : 0
   const promoList = ranked.filter((p) => p.ninebox && (p.ninebox.toUpperCase().includes('HIGH POTENTIAL') || p.ninebox.toUpperCase().includes('PROMOTABLE')))
   const needDevList = ranked.filter((p) => p.s_cli < 12 * 0.7 || p.s_kpi < 12 * 0.7)
@@ -275,7 +276,7 @@ function AnalysisResult({ ranked }) {
     const noSanksi = !s || s === '—' || s === 'null' || s === 'none' || s === '-' || s === 'nihil' || s === 'bersih' || s.includes('tidak ada') || s === 'tidak'
     return !noSanksi
   })
-  const sanksiMax = SCORE_COMPONENTS.find((c) => c.key === 's_sanksi')?.max || 10
+  const sanksiMax = components.find((c) => c.key === 's_sanksi')?.max || 10
   const kuatTop = [
     top.s_nb >= 20 * 0.8 ? `9-Box (${top.s_nb}/20)` : '',
     top.s_cli >= 12 * 0.8 ? `CLI (${top.s_cli}/12)` : '',
@@ -335,7 +336,7 @@ function AnalysisResult({ ranked }) {
             </tr>
           </thead>
           <tbody>
-            {SCORE_COMPONENTS.map((k) => {
+            {components.map((k) => {
               const vals = ranked.map((p) => p[k.key])
               const best = Math.max(...vals)
               return (
@@ -429,6 +430,7 @@ function TalentPointSystemTab() {
   const [slots, setSlots] = useState(['', '', null, null, null])
   const [analyzing, setAnalyzing] = useState(false)
   const [ranked, setRanked] = useState(null)
+  const [analyzeError, setAnalyzeError] = useState(null)
 
   useEffect(() => {
     let alive = true
@@ -454,10 +456,12 @@ function TalentPointSystemTab() {
       return next
     })
     setRanked(null)
+    setAnalyzeError(null)
   }
   function handleRemove(index) {
     setSlots((prev) => { const next = [...prev]; next[index] = null; return next })
     setRanked(null)
+    setAnalyzeError(null)
   }
   function handleAddSlot() {
     setSlots((prev) => { const idx = prev.indexOf(null); if (idx < 0) return prev; const next = [...prev]; next[idx] = ''; return next })
@@ -465,6 +469,7 @@ function TalentPointSystemTab() {
   function handleResetAll() {
     setSlots(['', '', null, null, null])
     setRanked(null)
+    setAnalyzeError(null)
   }
 
   const profiles = useMemo(
@@ -475,10 +480,24 @@ function TalentPointSystemTab() {
   function handleAnalyze() {
     if (profiles.length < 2) return
     setAnalyzing(true)
+    setAnalyzeError(null)
     setTimeout(() => {
-      const scored = scoreCandidates(profiles, state.formulaWeights)
-      setRanked([...scored].sort((a, b) => b.totalScore - a.totalScore))
-      setAnalyzing(false)
+      // Dibungkus try/catch: sebelumnya kalau scoreCandidates melempar error
+      // (mis. karena data karyawan tidak lengkap/format tak terduga), tombol
+      // macet selamanya di "Menganalisis…" dan bagian "Analisis Talent Point
+      // System" tidak pernah muncul, TANPA pesan apapun ke user. Sekarang
+      // errornya ditangkap, ditampilkan jelas, dan di-log ke console untuk
+      // ditelusuri lebih lanjut kalau masih terjadi.
+      try {
+        const scored = scoreCandidates(profiles, state.formulaWeights)
+        setRanked([...scored].sort((a, b) => b.totalScore - a.totalScore))
+      } catch (err) {
+        console.error('[TalentPointSystem] Gagal menganalisis:', err)
+        setAnalyzeError(err?.message || 'Terjadi kesalahan tak terduga saat menganalisis.')
+        setRanked(null)
+      } finally {
+        setAnalyzing(false)
+      }
     }, 10)
   }
 
@@ -551,7 +570,21 @@ function TalentPointSystemTab() {
 
       {filledCount >= 2 && <CompareTable profiles={profiles} />}
 
-      {ranked && <AnalysisResult ranked={ranked} />}
+      {analyzeError && (
+        <div
+          style={{
+            padding: '12px 16px', marginBottom: 16, background: 'rgba(192,57,43,.07)',
+            border: '1px solid var(--danger)', borderRadius: 9, color: 'var(--danger)', fontSize: 12.5,
+          }}
+        >
+          <strong>Gagal menganalisis:</strong> {analyzeError}
+          <div style={{ marginTop: 4, color: 'var(--muted)', fontSize: 11 }}>
+            Coba klik <strong>Analyze</strong> lagi. Kalau tetap gagal, cek console browser (F12) untuk detail errornya.
+          </div>
+        </div>
+      )}
+
+      {ranked && <AnalysisResult ranked={ranked} formulaWeights={state.formulaWeights} />}
     </div>
   )
 }
@@ -575,13 +608,16 @@ export default function TalentPointSystem() {
         </div>
       </div>
       <div className="content">
-        {tab === 'tps' ? (
-          <div className="page active">
-            <TalentPointSystemTab />
-          </div>
-        ) : (
+        {/* Kedua tab TETAP dimount (disembunyikan pakai display:none, bukan
+            unmount/conditional render) — supaya slot karyawan yang sudah
+            dipilih & hasil Analyze di tab "Talent Point System" TIDAK reset
+            saat pindah ke tab "Formula" lalu balik lagi. */}
+        <div className="page active" style={{ display: tab === 'tps' ? 'block' : 'none' }}>
+          <TalentPointSystemTab />
+        </div>
+        <div style={{ display: tab === 'formula' ? 'block' : 'none' }}>
           <FormulaTab />
-        )}
+        </div>
       </div>
     </div>
   )

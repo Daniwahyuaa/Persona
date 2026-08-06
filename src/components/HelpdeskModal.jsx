@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { supabase } from '../lib/supabaseClient.js'
 
 export default function HelpdeskModal({ onClose }) {
   const [tipe, setTipe] = useState('pendaftaran')
@@ -19,9 +20,17 @@ export default function HelpdeskModal({ onClose }) {
     }
     setLoading(true)
     try {
-      // TODO(tahap-supabase): simpan permintaan ini ke tabel `helpdesk_requests`
-      // di Supabase supaya admin bisa melihatnya lewat menu Kotak Masuk.
-      await new Promise((r) => setTimeout(r, 500))
+      // Simpan permintaan ke tabel `requests` di Supabase, supaya langsung
+      // muncul di menu "Kotak Masuk" admin/superadmin (lihat Inbox.jsx).
+      const { error: insertError } = await supabase.from('requests').insert({
+        tipe,
+        identitas,
+        nama,
+        email,
+        catatan: catatan || null,
+        status: 'Baru',
+      })
+      if (insertError) throw insertError
       setSent(true)
     } catch (err) {
       setError(err.message || 'Gagal mengirim permintaan')

@@ -63,6 +63,21 @@ const FORMULA_DEFAULT = [
  * persis shape formulaWeights di index.html asli. Fallback ke default kalau
  * tabel formula kosong/gagal.
  */
+// Normalisasi key komponen: trim + lowercase, supaya pencocokan tidak rapuh
+// terhadap variasi penulisan di tabel `formula` Supabase (mis. "Pendidikan",
+// " sanksi", "SANKSI" tetap dianggap sama dengan key baku 'pendidikan'/'sanksi').
+// Ini penting karena kalau ada SATU komponen saja yang salah tulis, sebelumnya
+// seluruh bobot komponen itu terbaca 0 (poin jadi 0 walau data karyawan ada).
+function normKey(v) {
+  return String(v || '').trim().toLowerCase()
+}
+
+// Cari entri formula berdasarkan key, case/whitespace-insensitive.
+function findFormula(formulaWeights, key) {
+  const nk = normKey(key)
+  return formulaWeights.find((fw) => normKey(fw.key) === nk)
+}
+
 export async function getFormulaWeights() {
   try {
     const { data, error } = await supabase.from('formula').select('*').order('urutan', { ascending: true })
@@ -71,8 +86,9 @@ export async function getFormulaWeights() {
 
     const byKomponen = {}
     data.forEach((r) => {
-      const key = r.komponen
-      if (!key) return
+      const rawKey = r.komponen
+      if (!rawKey) return
+      const key = normKey(rawKey) // simpan key dalam bentuk ternormalisasi (trim+lowercase)
       if (!byKomponen[key]) byKomponen[key] = { key, bobot: Number(r.bobot) || 0, tiers: [] }
       byKomponen[key].tiers.push({ nilai: r.tier_nilai || '', poin: Number(r.poin_dasar) || 0 })
     })
@@ -84,21 +100,25 @@ export async function getFormulaWeights() {
 }
 
 function getW(formulaWeights, key) {
-  const f = formulaWeights.find((fw) => fw.key === key)
+  const f = findFormula(formulaWeights, key)
   return f ? f.bobot / 100 : 0
 }
 
-// Poin dev/project/awarding: nilai TERTINGGI dari tingkatan yang dimiliki, di-cap ke bobot komponen.
-function calcDevProjAwdScore(intl, nas, bumn, ptpn, perus) {
-  const raw = (intl >= 1 ? 5 : 0) || (nas >= 1 ? 4 : 0) || (bumn >= 1 ? 3 : 0) || (ptpn >= 1 ? 2 : 0) || (perus >= 1 ? 1 : 0)
-  const acc = Math.min(5, intl * 5 + nas * 4 + bumn * 3 + ptpn * 2 + perus * 1)
-  return Math.min(5, Math.max(raw, acc))
+// Poin dev/project/awarding: nilai TERTINGGI dari tingkatan yang dimiliki, di-cap ke bobot
+// komponen (dibaca dinamis dari tab Formula, bukan hardcode 5) — 5 tingkatan tier meniru
+// urutan default (Internasional=100%, Nasional=80%, BUMN=60%, PTPN=40%, Perusahaan=20% dari bobot).
+function calcDevProjAwdScore(formulaWeights, key, intl, nas, bumn, ptpn, perus) {
+  const w = getW(formulaWeights, key) * 100 // bobot komponen dalam poin, mis. 5
+  const p5 = w, p4 = w * 0.8, p3 = w * 0.6, p2 = w * 0.4, p1 = w * 0.2
+  const raw = (intl >= 1 ? p5 : 0) || (nas >= 1 ? p4 : 0) || (bumn >= 1 ? p3 : 0) || (ptpn >= 1 ? p2 : 0) || (perus >= 1 ? p1 : 0)
+  const acc = Math.min(w, intl * p5 + nas * p4 + bumn * p3 + ptpn * p2 + perus * p1)
+  return parseFloat(Math.min(w, Math.max(raw, acc)).toFixed(2))
 }
 
 function calcSanksiScore(formulaWeights, sanksi) {
   const s = String(sanksi || '').toLowerCase().trim()
   const noSanksi = !s || s === '—' || s === 'null' || s === 'none' || s === '-' || s === 'nihil' || s === 'bersih' || s.includes('tidak ada') || s === 'tidak'
-  const fw = formulaWeights.find((f) => f.key === 'sanksi')
+  const fw = findFormula(formulaWeights, 'sanksi')
   const wSanksi = getW(formulaWeights, 'sanksi')
   const tiers = fw?.tiers || []
   const tier = tiers.find((x) => {
@@ -111,13 +131,17 @@ function calcSanksiScore(formulaWeights, sanksi) {
 
 function calcPendidikanScore(formulaWeights, pend) {
   const p = String(pend || '').toLowerCase().trim()
-  const wPend = getW(formulaWeights, 'pendidikan') * 100
-  if (p.includes('s3') || p.includes('doktor')) return parseFloat(wPend.toFixed(2))
-  if (p.includes('s2') || p.includes('magister') || p.includes('master')) return 4
-  if (p.includes('s1') || p.includes('sarjana') || p.includes('d4')) return 3
-  if (p.includes('d3') || p.includes('diploma')) return parseFloat((wPend * 0.4).toFixed(2))
+  const fw = findFormula(formulaWeights, 'pendidikan')
+  const wPend = getW(formulaWeights, 'pendidikan')
+  const t = fw?.tiers || []
+  // Dinamis dari tier di tab Formula (urutan default: S3=100%,S2=80%,S1=60%,D3=40%,SMA=20% dari bobot).
+  const getTP = (idx) => ((t[idx]?.poin ?? [100, 80, 60, 40, 20][idx]) / 100) * wPend * 100
+  if (p.includes('s3') || p.includes('doktor')) return parseFloat(getTP(0).toFixed(2))
+  if (p.includes('s2') || p.includes('magister') || p.includes('master')) return parseFloat(getTP(1).toFixed(2))
+  if (p.includes('s1') || p.includes('sarjana') || p.includes('d4')) return parseFloat(getTP(2).toFixed(2))
+  if (p.includes('d3') || p.includes('diploma')) return parseFloat(getTP(3).toFixed(2))
   if (p.includes('sma') || p.includes('smk') || p.includes('smp') || p.includes('sd') || p.includes('slta') || p.includes('sltp'))
-    return parseFloat((wPend * 0.2).toFixed(2))
+    return parseFloat(getTP(4).toFixed(2))
   return 0
 }
 
@@ -134,7 +158,7 @@ function calcKPIScore(formulaWeights, kpi) {
 
 function calcPerfScore(formulaWeights, perf) {
   const p = String(perf || '').toLowerCase().trim()
-  const fw = formulaWeights.find((f) => f.key === 'perf')
+  const fw = findFormula(formulaWeights, 'perf')
   const wPerf = getW(formulaWeights, 'perf')
   const t = fw?.tiers || []
   const getTP = (idx) => ((t[idx]?.poin ?? [100, 80, 60, 40, 20, 0][idx]) / 100) * wPerf * 100
@@ -148,7 +172,7 @@ function calcPerfScore(formulaWeights, perf) {
 
 function calcNineboxScore(formulaWeights, nb) {
   const n = String(nb || '').toLowerCase().trim()
-  const fw = formulaWeights.find((f) => f.key === 'ninebox')
+  const fw = findFormula(formulaWeights, 'ninebox')
   const wNb = getW(formulaWeights, 'ninebox')
   const t = fw?.tiers || []
   const getTP = (idx) => ((t[idx]?.poin ?? [100, 80, 60, 40, 20, 0][idx]) / 100) * wNb * 100
@@ -173,7 +197,7 @@ function calcRotasiScore(formulaWeights, rot) {
 
 function calcAsesmenScore(formulaWeights, hasil) {
   const h = String(hasil || '').toLowerCase().trim()
-  const fw = formulaWeights.find((f) => f.key === 'asesmen')
+  const fw = findFormula(formulaWeights, 'asesmen')
   const wAs = getW(formulaWeights, 'asesmen')
   const t = fw?.tiers || []
   const findTierPoin = (codes, fallback) => {
@@ -239,9 +263,9 @@ export function buildCandidateProfile(row) {
  */
 export function scoreCandidates(profiles, formulaWeights) {
   return profiles.map((p) => {
-    const s_awd = parseFloat(calcDevProjAwdScore(p.awd_int, p.awd_nas, p.awd_bumn, p.awd_ptpn, p.awd_perus).toFixed(2))
-    const s_dev = parseFloat(calcDevProjAwdScore(p.dev_alp, p.dev_pldp, p.dev_sert, p.dev_ws, p.dev_web).toFixed(2))
-    const s_proj = parseFloat(calcDevProjAwdScore(p.proj_int, p.proj_nas, p.proj_bumn, p.proj_ptpn, p.proj_perus).toFixed(2))
+    const s_awd = calcDevProjAwdScore(formulaWeights, 'awarding', p.awd_int, p.awd_nas, p.awd_bumn, p.awd_ptpn, p.awd_perus)
+    const s_dev = calcDevProjAwdScore(formulaWeights, 'dev', p.dev_alp, p.dev_pldp, p.dev_sert, p.dev_ws, p.dev_web)
+    const s_proj = calcDevProjAwdScore(formulaWeights, 'project', p.proj_int, p.proj_nas, p.proj_bumn, p.proj_ptpn, p.proj_perus)
     const s_sanksi = calcSanksiScore(formulaWeights, p.sanksi)
     const s_pend = calcPendidikanScore(formulaWeights, p.pendidikan)
     const s_cli = calcCLIScore(formulaWeights, p.cli)
@@ -256,16 +280,30 @@ export function scoreCandidates(profiles, formulaWeights) {
 }
 
 // Komponen detail + nilai maks — persis KOMPONEN di index.html asli (total 100).
+// `max` di sini cuma nilai DEFAULT (dipakai kalau formulaWeights belum ada) — pemakai
+// yang butuh nilai maks yang benar-benar sinkron dengan tab Formula harus pakai
+// getScoreComponents(formulaWeights) di bawah, bukan konstanta ini langsung.
 export const SCORE_COMPONENTS = [
-  { label: 'Pendidikan', max: 5, key: 's_pend' },
-  { label: 'Sanksi', max: 10, key: 's_sanksi' },
-  { label: '9-Box', max: 20, key: 's_nb' },
-  { label: 'CLI', max: 12, key: 's_cli' },
-  { label: 'KPI', max: 12, key: 's_kpi' },
-  { label: 'Performance Rating', max: 9, key: 's_perf' },
-  { label: 'Asesmen Terakhir', max: 12, key: 's_as' },
-  { label: 'Job Rotation', max: 5, key: 's_rot' },
-  { label: 'Development', max: 5, key: 's_dev' },
-  { label: 'Project Involvement', max: 5, key: 's_proj' },
-  { label: 'Awarding', max: 5, key: 's_awd' },
+  { label: 'Pendidikan', max: 5, key: 's_pend', formulaKey: 'pendidikan' },
+  { label: 'Sanksi', max: 10, key: 's_sanksi', formulaKey: 'sanksi' },
+  { label: '9-Box', max: 20, key: 's_nb', formulaKey: 'ninebox' },
+  { label: 'CLI', max: 12, key: 's_cli', formulaKey: 'cli' },
+  { label: 'KPI', max: 12, key: 's_kpi', formulaKey: 'kpi' },
+  { label: 'Performance Rating', max: 9, key: 's_perf', formulaKey: 'perf' },
+  { label: 'Asesmen Terakhir', max: 12, key: 's_as', formulaKey: 'asesmen' },
+  { label: 'Job Rotation', max: 5, key: 's_rot', formulaKey: 'rotasi' },
+  { label: 'Development', max: 5, key: 's_dev', formulaKey: 'dev' },
+  { label: 'Project Involvement', max: 5, key: 's_proj', formulaKey: 'project' },
+  { label: 'Awarding', max: 5, key: 's_awd', formulaKey: 'awarding' },
 ]
+
+// Versi dinamis: `max` tiap komponen dihitung dari bobot yang benar-benar aktif di
+// tab Formula (formulaWeights), bukan angka default statis — supaya kalau bobot
+// diubah, kolom "Maks" & progress bar di "Rincian Poin per Komponen" ikut berubah.
+export function getScoreComponents(formulaWeights) {
+  if (!formulaWeights || !formulaWeights.length) return SCORE_COMPONENTS
+  return SCORE_COMPONENTS.map((c) => ({
+    ...c,
+    max: parseFloat((getW(formulaWeights, c.formulaKey) * 100).toFixed(2)) || c.max,
+  }))
+}

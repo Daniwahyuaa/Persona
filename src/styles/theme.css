@@ -49,7 +49,7 @@ html[data-theme='dark'] {
   --title-text: #000000;
 }
 
-html[data-theme='dark'] .sidebar {
+html[data-theme='dark'] .sidebar-panel {
   background: #000000;
 }
 html[data-theme='dark'] .login-screen {

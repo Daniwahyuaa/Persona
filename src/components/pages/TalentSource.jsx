@@ -19,10 +19,6 @@ import {
 
 const TABS = [
   { id: 'database', label: 'Database', icon: 'database' },
-  { id: 'asesmen', label: 'Asesmen', icon: 'checkSquare' },
-  { id: 'cli', label: 'CLI', icon: 'target' },
-  { id: 'kpi', label: 'KPI', icon: 'target' },
-  { id: 'jobrot', label: 'Job Rotation', icon: 'refresh' },
 ]
 
 // ── Badge 9-Box (persis .badge-hp/pr/sc/st/un/null di base.css) ──

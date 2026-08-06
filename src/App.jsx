@@ -5,13 +5,45 @@ import Sidebar from './components/Sidebar.jsx'
 import MainContent from './components/MainContent.jsx'
 import Icon from './components/Icon.jsx'
 import { getDefaultMenu, canAccessMenu } from './data/navItems.js'
-import { avatarColor, initials } from './lib/avatar.js'
+import { supabase } from './lib/supabaseClient.js'
 
 export default function App() {
   const { user, checkingSession } = useAuth()
   const [activeMenu, setActiveMenu] = useState(null)
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [inboxCount, setInboxCount] = useState(0)
+
+  // Hitung permintaan "Kotak Masuk" yang belum diproses secara real (bukan
+  // hardcode 0 lagi), supaya badge merah di menu Kelola Akun benar-benar
+  // mencerminkan jumlah permintaan pending dari tabel `requests`. Hanya
+  // relevan untuk admin/superadmin karena hanya mereka yang punya menu ini.
+  useEffect(() => {
+    const role = String(user?.role || '').toLowerCase()
+    if (!user || (role !== 'admin' && role !== 'superadmin')) {
+      setInboxCount(0)
+      return
+    }
+
+    let active = true
+
+    async function loadInboxCount() {
+      const { count } = await supabase
+        .from('requests')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'pending')
+      if (active) setInboxCount(count || 0)
+    }
+
+    loadInboxCount()
+    // Refresh berkala supaya badge tetap up to date selama sesi berjalan.
+    const interval = setInterval(loadInboxCount, 60000)
+
+    return () => {
+      active = false
+      clearInterval(interval)
+    }
+  }, [user])
 
   // Set menu default begitu role diketahui (tp untuk user/executive, ts untuk admin/superadmin).
   useEffect(() => {
@@ -90,20 +122,8 @@ export default function App() {
     setMobileOpen(false)
   }
 
-  const nama = user.nama || user.username || '—'
-
   return (
     <>
-      {/* Badge "Selamat Datang, {Nama}" + avatar inisial — pojok kanan atas, meniru
-          #app-welcome-badge di index.html asli (muncul setelah login, menggantikan
-          logo watermark yang tampil di layar login). */}
-      <div className="app-welcome-badge">
-        <div className="app-welcome-avatar" style={{ background: avatarColor(nama) }}>
-          {initials(nama)}
-        </div>
-        <span className="app-welcome-text">Selamat Datang, {nama}</span>
-      </div>
-
       <div className={`app${mobileOpen ? ' mobile-sidebar-open' : ''}`}>
         <button id="mobile-menu-btn" onClick={handleToggleSidebar} title="Buka menu">
           <Icon name="menuBars" size={18} strokeWidth={2.2} />
@@ -115,8 +135,7 @@ export default function App() {
           collapsed={collapsed}
           onToggleCollapse={handleToggleSidebar}
           mobileOpen={mobileOpen}
-          onOpenUploadModal={() => alert('Modal upload Excel akan dibuat pada tahap berikutnya.')}
-          inboxCount={0}
+          inboxCount={inboxCount}
         />
 
         {/* Backdrop gelap di belakang sidebar saat dibuka di mobile — tap di luar

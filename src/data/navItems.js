@@ -37,14 +37,6 @@ export const navSections = [
     ],
   },
   {
-    id: 'section-data',
-    label: 'Data',
-    roles: ['superadmin', 'admin'],
-    items: [
-      { id: 'upload', label: 'Upload Excel', icon: 'upload', action: 'openUploadModal', roles: ['superadmin', 'admin'] },
-    ],
-  },
-  {
     id: 'section-akun',
     label: 'Akun',
     roles: ['superadmin', 'admin'],

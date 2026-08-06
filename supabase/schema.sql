@@ -174,10 +174,18 @@ create table if not exists public.requests (
   tipe text,
   identitas text,
   nama text,
+  email text,
   catatan text,
-  status text not null default 'pending' check (status in ('pending','resolved')),
+  -- Catatan: nilai status di database yang sebenarnya sudah lama dipakai
+  -- ('Baru','Diproses','Selesai', dst) — ikuti constraint yang SUDAH ADA di
+  -- project Supabase kamu (lihat pg_constraint), jangan asal timpa ke sini.
+  status text not null default 'Baru',
   created_at timestamptz not null default now()
 );
+
+-- Jaga-jaga kalau tabel requests sudah pernah dibuat sebelum kolom email ada
+-- (mis. sudah pernah dijalankan sebelum fitur Helpdesk -> Kotak Masuk ini ada).
+alter table public.requests add column if not exists email text;
 
 -- ─────────────────────────────────────────────────────────────
 -- ROW LEVEL SECURITY (RLS) — dasar. Sesuaikan lagi sesuai kebutuhan.
@@ -260,6 +268,13 @@ create policy "formula: hanya admin" on public.formula
 
 create policy "requests: hanya admin" on public.requests
   for select using (public.current_role() in ('superadmin','admin'));
+
+-- Form Helpdesk bisa diisi dari layar LOGIN (belum punya sesi/auth sama sekali),
+-- jadi insert-nya harus dibuka untuk publik (anon), bukan cuma authenticated.
+-- Admin tetap satu-satunya yang bisa MEMBACA (lihat policy select di atas).
+create policy "requests: siapa saja boleh kirim permintaan" on public.requests
+  for insert
+  with check (true);
 
 -- Menulis (insert/update/delete) untuk admin/superadmin saja — tambahkan per tabel
 -- sesuai kebutuhan, contoh untuk karyawan:

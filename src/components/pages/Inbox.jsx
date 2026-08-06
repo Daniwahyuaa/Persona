@@ -3,7 +3,7 @@ import Icon from '../Icon.jsx'
 import { supabase } from '../../lib/supabaseClient.js'
 
 export default function Inbox() {
-  const [statusFilter, setStatusFilter] = useState('pending')
+  const [statusFilter, setStatusFilter] = useState('Baru')
   const [rows, setRows] = useState(null)
   const [loading, setLoading] = useState(false)
 
@@ -50,8 +50,8 @@ export default function Inbox() {
           </p>
           <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
             <select className="fselect" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-              <option value="pending">Belum Diproses</option>
-              <option value="resolved">Selesai</option>
+              <option value="Baru">Belum Diproses</option>
+              <option value="Selesai">Selesai</option>
               <option value="">Semua</option>
             </select>
           </div>
@@ -79,13 +79,16 @@ export default function Inbox() {
                       {r.nama || '—'} <span style={{ color: 'var(--dim)', fontWeight: 400 }}>· {r.identitas || '—'}</span>
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>{r.tipe || 'Permintaan'}</div>
+                    {r.email && (
+                      <div style={{ fontSize: 12, color: 'var(--text)', marginBottom: 2 }}>✉️ {r.email}</div>
+                    )}
                     {r.catatan && <div style={{ fontSize: 12, color: 'var(--text)' }}>{r.catatan}</div>}
                     <div style={{ fontSize: 10, color: 'var(--dim)', marginTop: 4 }}>
                       {r.created_at ? new Date(r.created_at).toLocaleString('id-ID') : ''}
                     </div>
                   </div>
-                  <span className={`badge ${r.status === 'resolved' ? 'badge-hp' : 'badge-sc'}`}>
-                    {r.status === 'resolved' ? 'Selesai' : 'Belum Diproses'}
+                  <span className={`badge ${r.status === 'Selesai' ? 'badge-hp' : 'badge-sc'}`}>
+                    {r.status || 'Baru'}
                   </span>
                 </div>
               ))}
