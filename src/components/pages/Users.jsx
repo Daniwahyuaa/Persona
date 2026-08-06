@@ -31,7 +31,7 @@ function ResetPasswordModal({ target, onClose, onSubmit, submitting }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={onClose}>
-      <form onSubmit={handleSubmit} onClick={(e) => e.stopPropagation()} style={{ background: 'var(--bg2)', borderRadius: 12, padding: 22, width: 360, boxShadow: '0 12px 40px rgba(0,0,0,.25)' }}>
+      <form onSubmit={handleSubmit} onClick={(e) => e.stopPropagation()} style={{ background: 'var(--bg2)', borderRadius: 12, padding: 22, width: 'min(360px, 92vw)', maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 12px 40px rgba(0,0,0,.25)' }}>
         <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 4 }}>Ganti Password</div>
         <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>
           Untuk <strong>{target.nama || target.username}</strong> ({target.username})
@@ -64,7 +64,7 @@ function ResetPasswordModal({ target, onClose, onSubmit, submitting }) {
 function DeleteConfirmModal({ target, onClose, onConfirm, submitting }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--bg2)', borderRadius: 12, padding: 22, width: 360, boxShadow: '0 12px 40px rgba(0,0,0,.25)' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--bg2)', borderRadius: 12, padding: 22, width: 'min(360px, 92vw)', maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 12px 40px rgba(0,0,0,.25)' }}>
         <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 4, color: 'var(--danger)' }}>Hapus User?</div>
         <div style={{ fontSize: 12.5, color: 'var(--text)', marginBottom: 14, lineHeight: 1.6 }}>
           Akun <strong>{target.nama || target.username}</strong> ({target.username}) akan dihapus permanen dan tidak
@@ -110,7 +110,7 @@ function NikLinkModal({ target, onClose, onSubmit, submitting }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--bg2)', borderRadius: 12, padding: 22, width: 380, boxShadow: '0 12px 40px rgba(0,0,0,.25)' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--bg2)', borderRadius: 12, padding: 22, width: 'min(380px, 92vw)', maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 12px 40px rgba(0,0,0,.25)' }}>
         <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 4 }}>Tautkan NIK Karyawan</div>
         <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>
           Untuk akun <strong>{target.nama || target.username}</strong> ({target.username}){target.nik && (

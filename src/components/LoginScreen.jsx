@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
+import { useTheme } from '../context/ThemeContext.jsx'
 import Icon from './Icon.jsx'
 import HelpdeskModal from './HelpdeskModal.jsx'
-import logoUrl from '../assets/logo.js'
+import logoColor from '../assets/logo-color.png'
+import logoWhite from '../assets/logo-white.png'
 import sgnLogoUrl from '../assets/sgnLogo.js'
 
 export default function LoginScreen() {
   const { login, register, loginWithGoogle } = useAuth()
+  const { theme } = useTheme()
   const [mode, setMode] = useState('login') // 'login' | 'register'
 
   const [nama, setNama] = useState('')
@@ -68,7 +71,7 @@ export default function LoginScreen() {
       <img src={sgnLogoUrl} alt="Sinergi Gula Nusantara" className="sgn-fixed-logo" />
       <div className="login-box">
         <div className="login-logo">
-          <img src={logoUrl} alt="Persona" />
+          <img src={theme === 'dark' ? logoWhite : logoColor} alt="Persona" />
         </div>
 
         <form onSubmit={handleSubmit}>

@@ -120,15 +120,6 @@ html[data-theme='dark'] body {
   width: 100%;
   height: auto;
   display: block;
-  margin-bottom: 2px;
-}
-.ss-name {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  margin-top: 4px;
 }
 
 .nav {
@@ -194,8 +185,9 @@ html[data-theme='dark'] body {
 
 .tp-result-item{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border:1px solid var(--border2);border-radius:8px;cursor:pointer;font-size:12.5px}
 .tp-result-item:hover{border-color:var(--accent);background:var(--bg2)}
-.tp-identity-item{font-size:11.5px;color:var(--text)}
-.tp-identity-item b{display:block;font-size:9.5px;color:var(--dim);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px}
+.tp-identity-box{background:var(--bg3);border-radius:8px;padding:8px 12px}
+.tp-identity-label{font-size:9.5px;color:var(--dim);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px}
+.tp-identity-value{font-size:12.5px;color:var(--text);font-weight:600}
 
 .nav-badge {
   background: var(--danger);
@@ -493,6 +485,31 @@ html:not([data-theme='dark']) .card-title {
 }
 
 /* ══ MOBILE (≤768px) ══ */
+
+/* Cegah body ikut scroll horizontal kalau ada elemen yang meleber tanpa sengaja. */
+html, body {
+  overflow-x: hidden;
+}
+#root {
+  overflow-x: hidden;
+}
+/* Guard umum: input/select/textarea/button tidak boleh melebihi lebar induknya
+   di layar sempit, apapun width/minWidth inline yang dipasang di komponen. */
+@media (max-width: 480px) {
+  input, select, textarea, button {
+    max-width: 100%;
+  }
+}
+
+/* Backdrop gelap di belakang sidebar saat drawer mobile terbuka. */
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 395;
+  animation: fadeIn 0.2s ease;
+}
+
 @media (max-width: 768px) {
   .sidebar {
     position: fixed;
@@ -511,18 +528,122 @@ html:not([data-theme='dark']) .card-title {
   }
   #mobile-menu-btn {
     display: flex;
+    top: 9px;
+    left: 9px;
+    width: 36px;
+    height: 36px;
   }
+
+  /* Badge "Selamat Datang" diciutkan jadi avatar saja di mobile supaya tidak
+     menabrak tab/topbar di sisi kanan. */
+  .app-welcome-badge {
+    top: 8px;
+    right: 9px;
+    gap: 0;
+  }
+  .app-welcome-avatar {
+    width: 30px;
+    height: 30px;
+    font-size: 10.5px;
+    border: 2px solid var(--bg2);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  }
+  .app-welcome-text {
+    display: none;
+  }
+
   .content {
     padding: 14px;
   }
+
+  /* Beri ruang kiri/kanan di topbar supaya tab pertama & terakhir tidak
+     tertutup tombol menu (kiri) dan avatar welcome-badge (kanan) yang
+     posisinya fixed mengambang di atas topbar. */
   .topbar {
     padding: 0 14px;
+    padding-left: 52px !important;
+    padding-right: 46px !important;
     gap: 0;
   }
+  .top-tab {
+    padding: 12px 12px;
+    font-size: 13px;
+  }
+  .topbar-simple-title {
+    padding: 12px 0;
+  }
+  .topbar-simple-title span {
+    font-size: 13px;
+  }
+
   .card {
     padding: 12px 13px;
   }
+  .card-title {
+    margin: -12px -13px 12px -13px;
+    padding: 7px 16px;
+  }
+
+  .page-header-left h2 {
+    font-size: 19px;
+  }
+
+  /* Tabel: sedikit lebih rapat & tetap bisa di-scroll horizontal dengan mulus. */
+  table {
+    font-size: 12px;
+  }
+  th, td {
+    padding: 7px 9px;
+  }
+  .tbl-wrap {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Chart lebih ringkas biar tidak makan layar. */
+  .chart-wrap {
+    height: 190px;
+  }
+  .chart-wrap-sm {
+    height: 160px;
+  }
+
+  /* Dropdown export jangan sampai melebihi lebar layar. */
+  .export-menu {
+    max-width: calc(100vw - 28px);
+  }
+
+  /* Grid layout yang di desktop dibuat berdampingan (inline style),
+     di mobile dipaksa jadi 1 kolom bertumpuk agar tidak sempit/gepeng. */
+  #tp-pengukuran-grid,
+  .tp-kpi-grid,
+  .asesmen-detail-grid,
+  .editprofile-form-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .tp-kpi-list {
+    padding-left: 0 !important;
+    border-left: none !important;
+    margin-top: 10px;
+  }
+
+  /* Header foto+identitas Talent Profile ditumpuk (foto jadi strip atas). */
+  .tp-profile-header {
+    flex-direction: column !important;
+  }
+  .tp-profile-avatar {
+    min-width: 100% !important;
+    width: 100% !important;
+    height: 72px;
+  }
+  .tp-profile-avatar > div,
+  .tp-profile-avatar > img {
+    width: 100% !important;
+    height: 72px !important;
+    min-height: 72px !important;
+    font-size: 28px !important;
+  }
 }
+
 @media (max-width: 480px) {
   .content {
     padding: 10px;
@@ -532,6 +653,39 @@ html:not([data-theme='dark']) .card-title {
   }
   .card-title {
     font-size: 12.5px;
+    margin: -10px -10px 12px -10px;
+    padding: 6px 12px;
+  }
+  .page-header-left h2 {
+    font-size: 17px;
+  }
+
+  /* Toolbar pencarian/filter: tiap elemen ambil satu baris penuh biar rapi
+     dan mudah disentuh, bukan berjejer sempit. */
+  .toolbar {
+    gap: 8px;
+  }
+  .toolbar .search-input,
+  .toolbar .fselect {
+    flex: 1 1 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+  .count-badge {
+    margin-left: 0;
+    flex: 1 1 100%;
+    text-align: right;
+  }
+
+  /* Kartu 9-Box mini di Talent Profile: teks jangan terlalu kecil sampai
+     tidak terbaca di HP kecil. */
+  .tp-nb-cell {
+    font-size: 9px;
+    padding: 9px 2px;
+  }
+
+  .stat-value {
+    font-size: 22px;
   }
 }
 

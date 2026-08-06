@@ -2,13 +2,23 @@ import { useEffect, useState } from 'react'
 import Topbar from '../Topbar.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { supabase } from '../../lib/supabaseClient.js'
-import { TOP_HISTORY_RE } from '../../lib/talentProfileApi.js'
+import { TOP_HISTORY_RE, uploadProfilePhoto, removeProfilePhoto, updateOwnProfile } from '../../lib/talentProfileApi.js'
 
 const TINGKATAN_OPTIONS = {
   development: ['Internal', 'Eksternal', 'Sertifikasi'],
   project: ['Unit Kerja', 'Direktorat', 'Korporat', 'Lintas Perusahaan'],
   awarding: ['Unit Kerja', 'Direktorat', 'Korporat', 'Nasional'],
 }
+
+// Field data diri yang boleh diedit sendiri di kartu "Data Diri" — harus
+// selaras dengan SELF_EDITABLE_FIELDS di talentProfileApi.js.
+const DATA_DIRI_FIELDS = [
+  { key: 'grup', label: 'Grup Job Function' },
+  { key: 'unit_kerja', label: 'Unit Kerja' },
+  { key: 'level_jabatan', label: 'Level Jabatan' },
+  { key: 'golongan', label: 'Golongan' },
+  { key: 'pendidikan', label: 'Pendidikan' },
+]
 
 function currentYearOptions() {
   const now = new Date().getFullYear()
@@ -18,7 +28,19 @@ function currentYearOptions() {
 export default function EditProfile() {
   const { user } = useAuth()
 
+  // -- Foto profil --
+  const [photoFile, setPhotoFile] = useState(null)
   const [photoPreview, setPhotoPreview] = useState(null)
+  const [savedFotoUrl, setSavedFotoUrl] = useState(null)
+  const [photoStatus, setPhotoStatus] = useState('')
+  const [savingPhoto, setSavingPhoto] = useState(false)
+
+  // -- Data diri (NIK + field yang boleh diedit sendiri) --
+  const [karyawanNama, setKaryawanNama] = useState('')
+  const [dataDiri, setDataDiri] = useState({ grup: '', unit_kerja: '', level_jabatan: '', golongan: '', pendidikan: '' })
+  const [loadingDataDiri, setLoadingDataDiri] = useState(true)
+  const [dataDiriStatus, setDataDiriStatus] = useState('')
+  const [savingDataDiri, setSavingDataDiri] = useState(false)
 
   const [kategori, setKategori] = useState('recent')
   const [tipe, setTipe] = useState('development')
@@ -36,6 +58,7 @@ export default function EditProfile() {
   useEffect(() => {
     if (!user?.nik) {
       setLoadingSaved(false)
+      setLoadingDataDiri(false)
       return
     }
     supabase
@@ -46,12 +69,82 @@ export default function EditProfile() {
       .order('tahun', { ascending: false })
       .then(({ data }) => setSaved(data || []))
       .finally(() => setLoadingSaved(false))
+
+    // Ambil data karyawan sendiri (nama, foto, data diri saat ini) untuk mengisi
+    // form Foto Profil & Data Diri dengan nilai yang sudah tersimpan.
+    supabase
+      .from('karyawan')
+      .select('nama, foto_url, grup, unit_kerja, level_jabatan, golongan, pendidikan')
+      .eq('nik', user.nik)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!data) return
+        setKaryawanNama(data.nama || '')
+        setSavedFotoUrl(data.foto_url || null)
+        setDataDiri({
+          grup: data.grup || '',
+          unit_kerja: data.unit_kerja || '',
+          level_jabatan: data.level_jabatan || '',
+          golongan: data.golongan || '',
+          pendidikan: data.pendidikan || '',
+        })
+      })
+      .finally(() => setLoadingDataDiri(false))
   }, [user?.nik])
 
   function handlePhotoSelect(e) {
     const file = e.target.files?.[0]
     if (!file) return
+    setPhotoFile(file)
     setPhotoPreview(URL.createObjectURL(file))
+    setPhotoStatus('')
+  }
+
+  async function handleSavePhoto() {
+    if (!photoFile) return
+    setSavingPhoto(true)
+    setPhotoStatus('')
+    try {
+      const url = await uploadProfilePhoto(user?.nik, photoFile)
+      setSavedFotoUrl(url)
+      setPhotoFile(null)
+      setPhotoStatus('Foto profil tersimpan.')
+    } catch (err) {
+      setPhotoStatus(err.message || 'Gagal menyimpan foto.')
+    } finally {
+      setSavingPhoto(false)
+    }
+  }
+
+  async function handleRemovePhoto() {
+    setPhotoFile(null)
+    setPhotoPreview(null)
+    // Kalau belum ada foto tersimpan di server, cukup bersihkan preview lokal saja.
+    if (!savedFotoUrl) return
+    setSavingPhoto(true)
+    setPhotoStatus('')
+    try {
+      await removeProfilePhoto(user?.nik)
+      setSavedFotoUrl(null)
+      setPhotoStatus('Foto profil dihapus.')
+    } catch (err) {
+      setPhotoStatus(err.message || 'Gagal menghapus foto.')
+    } finally {
+      setSavingPhoto(false)
+    }
+  }
+
+  async function handleSaveDataDiri() {
+    setSavingDataDiri(true)
+    setDataDiriStatus('')
+    try {
+      await updateOwnProfile(user?.nik, dataDiri)
+      setDataDiriStatus('Data diri tersimpan. Perubahan langsung tampil di Talent Profile.')
+    } catch (err) {
+      setDataDiriStatus(err.message || 'Gagal menyimpan data diri.')
+    } finally {
+      setSavingDataDiri(false)
+    }
   }
 
   function handleTipeChange(v) {
@@ -126,39 +219,114 @@ export default function EditProfile() {
         {/* FOTO PROFIL */}
         <div className="card" style={{ maxWidth: 620 }}>
           <div className="card-title">Foto Profil</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 6 }}>
-            <div
-              style={{
-                width: 84, height: 84, borderRadius: '50%', background: 'var(--bg3)', border: '1.5px solid var(--border2)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0,
-              }}
-            >
-              {photoPreview ? (
-                <img src={photoPreview} alt="Foto profil" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              ) : (
-                <span style={{ fontSize: 11, color: '#dc2626' }}>Belum ada foto</span>
-              )}
+          {!user?.nik ? (
+            <div style={{ color: '#dc2626', fontSize: 12 }}>
+              NIK belum terhubung ke akun Anda — hubungi admin agar bisa mengatur foto profil.
             </div>
-            <div>
-              <input type="file" id="ep-photo-input" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoSelect} />
-              <button
-                onClick={() => document.getElementById('ep-photo-input').click()}
-                style={{ padding: '8px 16px', borderRadius: 8, border: '1.5px solid var(--border2)', background: 'var(--bg2)', color: 'var(--text)', fontFamily: 'var(--font-b)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
-              >
-                Pilih Foto
-              </button>
-              <button
-                onClick={() => setPhotoPreview(null)}
-                style={{ padding: '8px 16px', borderRadius: 8, border: '1.5px solid var(--border2)', background: 'transparent', color: 'var(--danger)', fontFamily: 'var(--font-b)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', marginLeft: 6 }}
-              >
-                Hapus Foto
-              </button>
-              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>
-                JPG/PNG, otomatis dikompres. Klik "Simpan" di bawah untuk menerapkan. Kalau tidak ada foto, tampilan
-                default adalah inisial nama.
+          ) : (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 6, flexWrap: 'wrap' }}>
+                <div
+                  style={{
+                    width: 84, height: 84, borderRadius: '50%', background: 'var(--bg3)', border: '1.5px solid var(--border2)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0,
+                  }}
+                >
+                  {photoPreview || savedFotoUrl ? (
+                    <img src={photoPreview || savedFotoUrl} alt="Foto profil" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <span style={{ fontSize: 28, fontWeight: 800, color: 'var(--dim)' }}>
+                      {(karyawanNama || user?.nama || '?').charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <input type="file" id="ep-photo-input" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoSelect} />
+                  <button
+                    onClick={() => document.getElementById('ep-photo-input').click()}
+                    style={{ padding: '8px 16px', borderRadius: 8, border: '1.5px solid var(--border2)', background: 'var(--bg2)', color: 'var(--text)', fontFamily: 'var(--font-b)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    Pilih Foto
+                  </button>
+                  {photoFile && (
+                    <button
+                      onClick={handleSavePhoto}
+                      disabled={savingPhoto}
+                      style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: 'var(--accent)', color: '#fff', fontFamily: 'var(--font-b)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', marginLeft: 6, opacity: savingPhoto ? 0.7 : 1 }}
+                    >
+                      {savingPhoto ? 'Menyimpan…' : 'Simpan Foto'}
+                    </button>
+                  )}
+                  {(savedFotoUrl || photoPreview) && (
+                    <button
+                      onClick={handleRemovePhoto}
+                      disabled={savingPhoto}
+                      style={{ padding: '8px 16px', borderRadius: 8, border: '1.5px solid var(--border2)', background: 'transparent', color: 'var(--danger)', fontFamily: 'var(--font-b)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', marginLeft: 6 }}
+                    >
+                      Hapus Foto
+                    </button>
+                  )}
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>
+                    JPG/PNG, maksimal 3MB. Klik "Simpan Foto" untuk langsung menerapkannya ke Talent Profile Anda.
+                  </div>
+                  {photoStatus && (
+                    <div style={{ fontSize: 11.5, color: photoStatus.startsWith('Gagal') ? 'var(--danger)' : 'var(--accent)', marginTop: 4, fontWeight: 600 }}>
+                      {photoStatus}
+                    </div>
+                  )}
+                </div>
               </div>
+            </>
+          )}
+        </div>
+
+        {/* DATA DIRI */}
+        <div className="card" style={{ maxWidth: 620 }}>
+          <div className="card-title">Data Diri</div>
+          {!user?.nik ? (
+            <div style={{ color: '#dc2626', fontSize: 12 }}>
+              NIK belum terhubung ke akun Anda — hubungi admin agar bisa mengedit data diri.
             </div>
-          </div>
+          ) : loadingDataDiri ? (
+            <div style={{ color: 'var(--muted)', fontSize: 12 }}>Memuat…</div>
+          ) : (
+            <>
+              <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>
+                Perbarui data diri Anda di bawah ini. Perubahan langsung tampil di Talent Profile.
+              </p>
+              <div className="editprofile-datadiri-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))', gap: 10, marginBottom: 14 }}>
+                <div className="login-field" style={{ margin: 0 }}>
+                  <label>NIK</label>
+                  <div style={{ background: 'var(--bg3)', borderRadius: 8, padding: '9px 12px', marginTop: 5, fontSize: 13, color: 'var(--muted)' }}>
+                    {user.nik}
+                  </div>
+                </div>
+                {DATA_DIRI_FIELDS.map((f) => (
+                  <div className="login-field" key={f.key} style={{ margin: 0 }}>
+                    <label>{f.label}</label>
+                    <input
+                      type="text"
+                      value={dataDiri[f.key]}
+                      onChange={(e) => setDataDiri((d) => ({ ...d, [f.key]: e.target.value }))}
+                      placeholder={`Isi ${f.label.toLowerCase()}`}
+                    />
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={handleSaveDataDiri}
+                disabled={savingDataDiri}
+                style={{ padding: '9px 18px', borderRadius: 8, border: 'none', background: 'var(--accent)', color: '#fff', fontFamily: 'var(--font-b)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', opacity: savingDataDiri ? 0.7 : 1 }}
+              >
+                {savingDataDiri ? 'Menyimpan…' : 'Simpan Data Diri'}
+              </button>
+              {dataDiriStatus && (
+                <span style={{ fontSize: 11.5, color: dataDiriStatus.startsWith('Gagal') ? 'var(--danger)' : 'var(--accent)', marginLeft: 10, fontWeight: 600 }}>
+                  {dataDiriStatus}
+                </span>
+              )}
+            </>
+          )}
         </div>
 
         {/* TAMBAH EMPLOYEE HISTORY */}
@@ -178,7 +346,7 @@ export default function EditProfile() {
             </select>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+          <div className="editprofile-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
             <div className="login-field" style={{ margin: 0 }}>
               <label>Jenis</label>
               <select value={tipe} onChange={(e) => handleTipeChange(e.target.value)}>

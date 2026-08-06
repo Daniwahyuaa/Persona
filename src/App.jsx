@@ -20,6 +20,15 @@ export default function App() {
     }
   }, [user?.role])
 
+  // Kunci scroll body saat drawer sidebar mobile terbuka, biar konten di
+  // belakangnya tidak ikut ter-scroll (perilaku umum drawer di HP).
+  useEffect(() => {
+    document.body.style.overflow = mobileOpen ? 'hidden' : ''
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [mobileOpen])
+
   if (checkingSession) {
     return (
       <div className="loading-overlay">
@@ -81,6 +90,16 @@ export default function App() {
           onOpenUploadModal={() => alert('Modal upload Excel akan dibuat pada tahap berikutnya.')}
           inboxCount={0}
         />
+
+        {/* Backdrop gelap di belakang sidebar saat dibuka di mobile — tap di luar
+            sidebar untuk menutupnya, supaya perilakunya seperti drawer aplikasi native. */}
+        {mobileOpen && (
+          <div
+            className="sidebar-backdrop"
+            onClick={() => setMobileOpen(false)}
+            aria-hidden="true"
+          />
+        )}
 
         <div className="main">
           <MainContent activeMenu={safeMenu} />

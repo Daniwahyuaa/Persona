@@ -2,7 +2,8 @@ import Icon from './Icon.jsx'
 import { getVisibleNavSections } from '../data/navItems.js'
 import { useTheme } from '../context/ThemeContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
-import logoUrl from '../assets/logo.js'
+import logoColor from '../assets/logo-color.png'
+import logoWhite from '../assets/logo-white.png'
 
 // Label peran dalam Bahasa Indonesia, disalin dari roleLabel map di index.html asli.
 const ROLE_LABELS = { superadmin: 'super admin', admin: 'admin', executive: 'executive', user: 'user' }
@@ -40,8 +41,7 @@ export default function Sidebar({
           <Icon name="chevronLeft" size={14} strokeWidth={2.5} id="sidebar-collapse-icon" />
         </button>
         <div className="logo-inner">
-          <img src={logoUrl} alt="Persona" />
-          <p className="ss-name">{user?.nama || ''}</p>
+          <img src={theme === 'dark' ? logoWhite : logoColor} alt="Persona" />
         </div>
       </div>
 

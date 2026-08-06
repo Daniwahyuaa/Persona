@@ -167,7 +167,7 @@ export default function Asesmen() {
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 16, alignItems: 'start' }}>
+                  <div className="asesmen-detail-grid" style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 16, alignItems: 'start' }}>
                     <div className="tbl-wrap">
                       <table>
                         <thead>

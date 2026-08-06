@@ -51,6 +51,74 @@ export async function getKaryawanFilterOptions() {
 }
 
 /**
+ * Upload foto profil ke Supabase Storage (bucket "profile-photos") lalu
+ * simpan URL publiknya ke kolom karyawan.foto_url. Path file selalu
+ * "{nik}/foto.<ext>" — replace file lama di path yang sama (upsert) supaya
+ * tidak menumpuk file yatim tiap kali ganti foto.
+ */
+export async function uploadProfilePhoto(nik, file) {
+  if (!nik) throw new Error('NIK belum terhubung ke akun Anda — hubungi admin.')
+  if (!file) throw new Error('Pilih file foto terlebih dahulu.')
+  if (!file.type?.startsWith('image/')) throw new Error('File harus berupa gambar (JPG/PNG).')
+  if (file.size > 3 * 1024 * 1024) throw new Error('Ukuran foto maksimal 3MB.')
+
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+  const path = `${nik}/foto.${ext}`
+
+  const { error: uploadError } = await supabase.storage
+    .from('profile-photos')
+    .upload(path, file, { upsert: true, cacheControl: '3600', contentType: file.type })
+  if (uploadError) {
+    // Storage bucket "profile-photos" belum dibuat di project Supabase ini —
+    // ini konfigurasi project, bukan bug di kode. Beri pesan yang jelas
+    // supaya admin tahu harus menjalankan bagian "STORAGE" di
+    // supabase/schema.sql (SQL Editor) untuk membuat bucket + policy-nya.
+    if (/bucket not found/i.test(uploadError.message || '')) {
+      throw new Error(
+        'Storage bucket "profile-photos" belum ada di project Supabase ini. Minta admin menjalankan bagian STORAGE pada supabase/schema.sql lewat Supabase SQL Editor, lalu coba lagi.'
+      )
+    }
+    throw uploadError
+  }
+
+  const { data: pub } = supabase.storage.from('profile-photos').getPublicUrl(path)
+  // Tempel cache-buster (timestamp) di URL supaya browser tidak menampilkan foto lama dari cache
+  // setelah ganti foto dengan nama file yang sama persis.
+  const fotoUrl = `${pub.publicUrl}?t=${Date.now()}`
+
+  const { error: updateError } = await supabase.from('karyawan').update({ foto_url: fotoUrl }).eq('nik', nik)
+  if (updateError) throw updateError
+
+  return fotoUrl
+}
+
+/** Hapus foto profil (set foto_url jadi null; file di storage dibiarkan, tidak wajib dihapus). */
+export async function removeProfilePhoto(nik) {
+  if (!nik) throw new Error('NIK belum terhubung ke akun Anda — hubungi admin.')
+  const { error } = await supabase.from('karyawan').update({ foto_url: null }).eq('nik', nik)
+  if (error) throw error
+}
+
+// Kolom karyawan yang boleh diubah sendiri lewat menu Edit Profile. Sengaja
+// dibatasi di sisi aplikasi (bukan hanya RLS) supaya user tidak bisa
+// menyelundupkan perubahan ke kolom sensitif (sanksi, ninebox, dst.) lewat
+// pemanggilan langsung — lihat juga komentar RLS "karyawan: user boleh
+// update profil sendiri" di supabase/schema.sql.
+const SELF_EDITABLE_FIELDS = ['grup', 'unit_kerja', 'level_jabatan', 'golongan', 'pendidikan']
+
+/** Update data identitas milik sendiri (Grup Job Function, Unit Kerja, Level Jabatan, Golongan, Pendidikan). */
+export async function updateOwnProfile(nik, fields) {
+  if (!nik) throw new Error('NIK belum terhubung ke akun Anda — hubungi admin.')
+  const payload = {}
+  for (const key of SELF_EDITABLE_FIELDS) {
+    if (key in fields) payload[key] = fields[key]?.trim ? fields[key].trim() : fields[key]
+  }
+  if (Object.keys(payload).length === 0) return
+  const { error } = await supabase.from('karyawan').update(payload).eq('nik', nik)
+  if (error) throw error
+}
+
+/**
  * Ambil semua data untuk halaman Talent Profile satu orang (nik), gabungan dari
  * karyawan + asesmen + cli_soft + cli_hard + kpi + nine_box + employee_history
  * + job_rotation (Career Journey).

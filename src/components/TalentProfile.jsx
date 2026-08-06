@@ -50,9 +50,9 @@ function TipePill({ v }) {
 
 function IdentityItem({ label, value }) {
   return (
-    <div className="tp-identity-item">
-      <b>{label}</b>
-      {value || '—'}
+    <div className="tp-identity-box">
+      <div className="tp-identity-label">{label}</div>
+      <div className="tp-identity-value">{value || '—'}</div>
     </div>
   )
 }
@@ -355,13 +355,21 @@ export default function TalentProfile() {
             <div id="tp-profile-wrap">
               <div className="tp-outer-title">Profile</div>
               <div className="card" style={{ marginBottom: 14, padding: 0, overflow: 'hidden' }}>
-                <div style={{ display: 'flex', gap: 0, alignItems: 'stretch' }}>
-                  <div style={{ background: 'linear-gradient(135deg,var(--accent) 0%,#1d7a4e 100%)', minWidth: 140, overflow: 'hidden', display: 'flex' }}>
-                    <div style={{ width: 140, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 38, fontWeight: 800, color: '#fff', letterSpacing: -1 }}>
-                      {(k.nama || '?').charAt(0).toUpperCase()}
-                    </div>
+                <div className="tp-profile-header" style={{ display: 'flex', gap: 0, alignItems: 'stretch' }}>
+                  <div className="tp-profile-avatar" style={{ background: 'linear-gradient(135deg,var(--accent) 0%,#1d7a4e 100%)', minWidth: 140, overflow: 'hidden', display: 'flex' }}>
+                    {k.foto_url ? (
+                      <img
+                        src={k.foto_url}
+                        alt={k.nama || 'Foto profil'}
+                        style={{ width: 140, height: '100%', minHeight: 140, objectFit: 'cover', display: 'block' }}
+                      />
+                    ) : (
+                      <div style={{ width: 140, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 38, fontWeight: 800, color: '#fff', letterSpacing: -1 }}>
+                        {(k.nama || '?').charAt(0).toUpperCase()}
+                      </div>
+                    )}
                   </div>
-                  <div style={{ flex: 1, padding: '20px 22px' }}>
+                  <div className="tp-profile-info" style={{ flex: 1, padding: '20px 22px' }}>
                     <div style={{ fontFamily: 'var(--font-d)', fontSize: 26, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>{k.nama}</div>
                     <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 12 }}>{k.posisi}</div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(160px,1fr))', gap: 8 }}>
@@ -373,8 +381,8 @@ export default function TalentProfile() {
                       <IdentityItem label="Pendidikan" value={k.pendidikan} />
                     </div>
                     <div style={{ fontSize: 10, color: 'var(--dim)', lineHeight: 1.5, marginTop: 10 }}>
-                      *) Apabila terdapat pembaruan data pribadi dapat menghubungi SDM Unit Kerja masing-masing untuk
-                      dilakukan update melalui SAP.
+                      *) Data di atas bisa Anda perbarui sendiri lewat menu <strong>Edit Profile</strong>. Untuk data resmi
+                      dari SAP (di luar field yang bisa diedit sendiri), hubungi SDM Unit Kerja masing-masing.
                     </div>
                   </div>
                 </div>
@@ -446,7 +454,7 @@ export default function TalentProfile() {
                       dibanding dengan jumlah yang tercapai, dinyatakan sebagai <strong>%Ketercapaian</strong> (jumlah
                       tercapai / jumlah diukur).
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
+                    <div className="tp-cli-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
                       <div style={{ paddingRight: 14, borderRight: '2px solid var(--border2)' }}>
                         <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--muted)', marginBottom: 8 }}>Soft CLI</div>
                         <CliMini cli={profile.cliSoft} label="Soft CLI" />
@@ -467,14 +475,14 @@ export default function TalentProfile() {
                       Skor performa kerja yang diukur setiap tahun.
                     </div>
                     {profile.kpiRiwayat.length > 0 && (
-                      <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 20, alignItems: 'start' }}>
+                      <div className="tp-kpi-grid" style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 20, alignItems: 'start' }}>
                         <div>
                           <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--dim)', marginBottom: 8 }}>
                             Tren Skor KPI
                           </div>
                           <KpiSparkline data={profile.kpiRiwayat} />
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingLeft: 20, borderLeft: '1.5px solid var(--border2)' }}>
+                        <div className="tp-kpi-list" style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingLeft: 20, borderLeft: '1.5px solid var(--border2)' }}>
                           {profile.kpiRiwayat.slice().reverse().map((kp) => (
                             <div key={kp.tahun} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, gap: 8 }}>
                               <span>KPI {kp.tahun}</span>
