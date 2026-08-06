@@ -22,10 +22,38 @@ export default function App() {
 
   // Kunci scroll body saat drawer sidebar mobile terbuka, biar konten di
   // belakangnya tidak ikut ter-scroll (perilaku umum drawer di HP).
+  // Pakai teknik position:fixed (bukan cuma overflow:hidden) karena di
+  // Safari iOS, overflow:hidden pada body saja tidak selalu mencegah
+  // konten di belakangnya ikut scroll/rubber-band saat drawer terbuka.
   useEffect(() => {
-    document.body.style.overflow = mobileOpen ? 'hidden' : ''
+    if (!mobileOpen) return
+
+    const scrollY = window.scrollY
+    const { body } = document
+    const prevStyle = {
+      position: body.style.position,
+      top: body.style.top,
+      left: body.style.left,
+      right: body.style.right,
+      width: body.style.width,
+      overflow: body.style.overflow,
+    }
+
+    body.style.position = 'fixed'
+    body.style.top = `-${scrollY}px`
+    body.style.left = '0'
+    body.style.right = '0'
+    body.style.width = '100%'
+    body.style.overflow = 'hidden'
+
     return () => {
-      document.body.style.overflow = ''
+      body.style.position = prevStyle.position
+      body.style.top = prevStyle.top
+      body.style.left = prevStyle.left
+      body.style.right = prevStyle.right
+      body.style.width = prevStyle.width
+      body.style.overflow = prevStyle.overflow
+      window.scrollTo(0, scrollY)
     }
   }, [mobileOpen])
 
@@ -76,7 +104,7 @@ export default function App() {
         <span className="app-welcome-text">Selamat Datang, {nama}</span>
       </div>
 
-      <div className="app">
+      <div className={`app${mobileOpen ? ' mobile-sidebar-open' : ''}`}>
         <button id="mobile-menu-btn" onClick={handleToggleSidebar} title="Buka menu">
           <Icon name="menuBars" size={18} strokeWidth={2.2} />
         </button>
@@ -101,6 +129,9 @@ export default function App() {
           />
         )}
 
+        {/* .main sengaja tidak diberi inert/aria-hidden supaya tidak mengganggu
+            komponen di dalamnya; scroll & interaksinya dimatikan lewat CSS
+            (.mobile-sidebar-open .main) selama drawer terbuka. */}
         <div className="main">
           <MainContent activeMenu={safeMenu} />
         </div>

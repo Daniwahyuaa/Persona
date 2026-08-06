@@ -508,6 +508,7 @@ html, body {
   background: rgba(0, 0, 0, 0.45);
   z-index: 395;
   animation: fadeIn 0.2s ease;
+  touch-action: none;
 }
 
 @media (max-width: 768px) {
@@ -526,6 +527,17 @@ html, body {
   .sidebar.mobile-open {
     transform: translateX(0);
   }
+
+  /* Saat drawer sidebar mobile terbuka, matikan scroll & interaksi konten
+     di belakangnya secara eksplisit — supaya yang bisa di-scroll cuma
+     sidebar-nya saja (bukan cuma mengandalkan body overflow:hidden, karena
+     .main punya scroll container sendiri yang independen dari body). */
+  .app.mobile-sidebar-open .main {
+    overflow: hidden;
+    touch-action: none;
+    pointer-events: none;
+  }
+
   #mobile-menu-btn {
     display: flex;
     top: 9px;
