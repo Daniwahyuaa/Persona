@@ -60,8 +60,12 @@ create table if not exists public.karyawan (
   aspirasi text,
   alasan text,
   ninebox text,
+  foto_url text,            -- URL foto profil (disimpan di storage bucket 'profile-photos'), diisi lewat Edit Profile
   updated_at timestamptz not null default now()
 );
+
+-- Jaga-jaga kalau tabel karyawan sudah pernah dibuat sebelum kolom foto_url ada.
+alter table public.karyawan add column if not exists foto_url text;
 
 -- 3) ASESMEN — pengganti sheet "Asesmen"
 create table if not exists public.asesmen (
@@ -280,3 +284,61 @@ create policy "employee_history: user boleh tambah riwayat sendiri" on public.em
 create policy "employee_history: admin boleh update/hapus" on public.employee_history
   for all using (public.current_role() in ('superadmin','admin'))
   with check (public.current_role() in ('superadmin','admin'));
+
+-- ─────────────────────────────────────────────────────────────
+-- EDIT PROFILE — user/admin/superadmin boleh update DATA DIRI SENDIRI
+-- (foto profil + grup/unit kerja/level jabatan/golongan/pendidikan) lewat
+-- menu Edit Profile, dikunci ke baris karyawan yang NIK-nya sama dengan
+-- profiles.nik milik akun yang login. Kolom lain (sanksi, ninebox, dst.)
+-- tetap hanya bisa diubah admin lewat policy "karyawan: admin boleh tulis"
+-- di atas — RLS Postgres tidak bisa membatasi per-kolom, jadi pembatasan
+-- kolom yang boleh diubah dilakukan di sisi aplikasi (lihat
+-- src/lib/talentProfileApi.js -> updateOwnProfile()), bukan di DB.
+-- ─────────────────────────────────────────────────────────────
+drop policy if exists "karyawan: user boleh update profil sendiri" on public.karyawan;
+create policy "karyawan: user boleh update profil sendiri" on public.karyawan
+  for update
+  using (nik = (select nik from public.profiles where id = auth.uid()))
+  with check (nik = (select nik from public.profiles where id = auth.uid()));
+
+-- ─────────────────────────────────────────────────────────────
+-- STORAGE — bucket untuk foto profil.
+-- Jalankan bagian ini juga di SQL Editor (storage.objects sudah disediakan
+-- Supabase, kita hanya menambah bucket + policy-nya).
+-- ─────────────────────────────────────────────────────────────
+insert into storage.buckets (id, name, public)
+values ('profile-photos', 'profile-photos', true)
+on conflict (id) do nothing;
+
+-- Semua orang (termasuk publik/anon) boleh MELIHAT foto profil, karena
+-- ditampilkan di Talent Profile yang bisa diakses lintas role.
+drop policy if exists "profile-photos: baca publik" on storage.objects;
+create policy "profile-photos: baca publik" on storage.objects
+  for select using (bucket_id = 'profile-photos');
+
+-- User yang login hanya boleh upload/ubah/hapus file dengan nama depan
+-- (folder) = NIK miliknya sendiri, contoh path: "10101010/foto.jpg".
+-- Ini mencegah satu user mengganti foto profil orang lain lewat Storage API.
+drop policy if exists "profile-photos: upload milik sendiri" on storage.objects;
+create policy "profile-photos: upload milik sendiri" on storage.objects
+  for insert
+  with check (
+    bucket_id = 'profile-photos'
+    and (storage.foldername(name))[1] = (select nik from public.profiles where id = auth.uid())
+  );
+
+drop policy if exists "profile-photos: update milik sendiri" on storage.objects;
+create policy "profile-photos: update milik sendiri" on storage.objects
+  for update
+  using (
+    bucket_id = 'profile-photos'
+    and (storage.foldername(name))[1] = (select nik from public.profiles where id = auth.uid())
+  );
+
+drop policy if exists "profile-photos: hapus milik sendiri" on storage.objects;
+create policy "profile-photos: hapus milik sendiri" on storage.objects
+  for delete
+  using (
+    bucket_id = 'profile-photos'
+    and (storage.foldername(name))[1] = (select nik from public.profiles where id = auth.uid())
+  );
