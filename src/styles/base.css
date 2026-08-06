@@ -831,3 +831,7 @@ tbody tr:hover td { background: var(--bg3); }
 @media (max-width: 768px) {
   #db-cli-scroll, #tp-career-scroll { -webkit-overflow-scrolling: touch; }
 }
+
+.btn-logout {
+  margin-bottom: 70px;
+}
