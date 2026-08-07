@@ -72,10 +72,18 @@ function normKey(v) {
   return String(v || '').trim().toLowerCase()
 }
 
-// Cari entri formula berdasarkan key, case/whitespace-insensitive.
+// Cari entri formula berdasarkan key, case/whitespace-insensitive. Kalau key TIDAK
+// ketemu di data live dari Supabase (mis. tabel formula belum lengkap 11 komponen,
+// atau nama komponennya beda dari key baku), JANGAN pulang tangan kosong — pakai
+// entri FORMULA_DEFAULT untuk komponen itu sebagai fallback. Sebelumnya kalau satu
+// komponen saja hilang/salah nama, bobotnya terbaca 0 → poin komponen itu 0 untuk
+// SEMUA kandidat → tabel "Rincian Poin per Komponen" & "Rekomendasi" tampak kosong
+// walau data mentah kandidat (yang dipakai Compare Table) sebenarnya lengkap.
 function findFormula(formulaWeights, key) {
   const nk = normKey(key)
-  return formulaWeights.find((fw) => normKey(fw.key) === nk)
+  const found = (formulaWeights || []).find((fw) => normKey(fw.key) === nk)
+  if (found) return found
+  return FORMULA_DEFAULT.find((fw) => normKey(fw.key) === nk)
 }
 
 export async function getFormulaWeights() {
@@ -89,8 +97,26 @@ export async function getFormulaWeights() {
       const rawKey = r.komponen
       if (!rawKey) return
       const key = normKey(rawKey) // simpan key dalam bentuk ternormalisasi (trim+lowercase)
-      if (!byKomponen[key]) byKomponen[key] = { key, bobot: Number(r.bobot) || 0, tiers: [] }
+      if (!byKomponen[key]) {
+        byKomponen[key] = {
+          key,
+          bobot: Number(r.bobot) || 0,
+          tiers: [],
+          // label & urutan diambil dari tabel formula (persis Tab Formula), supaya
+          // "Rincian Poin per Komponen" di hasil Analyze menampilkan nama & urutan
+          // komponen yang SAMA dengan yang admin atur di Tab Formula — bukan teks
+          // tetap yang di-hardcode di kode.
+          label: r.label || null,
+          urutan: r.urutan ?? null,
+        }
+      }
       byKomponen[key].tiers.push({ nilai: r.tier_nilai || '', poin: Number(r.poin_dasar) || 0 })
+    })
+    // Lengkapi komponen yang TIDAK ADA sama sekali di tabel formula Supabase (mis.
+    // baru 8 dari 11 komponen yang di-seed) dengan entri default-nya, supaya
+    // scoreCandidates/getScoreComponents tidak pernah menganggap bobotnya 0.
+    FORMULA_DEFAULT.forEach((def) => {
+      if (!byKomponen[def.key]) byKomponen[def.key] = def
     })
     const weights = Object.values(byKomponen)
     return weights.length ? weights : FORMULA_DEFAULT
@@ -297,13 +323,25 @@ export const SCORE_COMPONENTS = [
   { label: 'Awarding', max: 5, key: 's_awd', formulaKey: 'awarding' },
 ]
 
-// Versi dinamis: `max` tiap komponen dihitung dari bobot yang benar-benar aktif di
-// tab Formula (formulaWeights), bukan angka default statis — supaya kalau bobot
-// diubah, kolom "Maks" & progress bar di "Rincian Poin per Komponen" ikut berubah.
+// Versi dinamis: label, urutan, & `max` tiap komponen mengikuti persis apa yang
+// dikonfigurasi di Tab Formula (formulaWeights) — bukan cuma bobot. Sebelumnya
+// label & urutan di tabel "Rincian Poin per Komponen" selalu memakai teks/urutan
+// tetap dari SCORE_COMPONENTS, jadi kalau admin ganti nama komponen atau urutannya
+// di Tab Formula, tabel hasil Analyze tidak ikut berubah — sekarang disamakan.
 export function getScoreComponents(formulaWeights) {
   if (!formulaWeights || !formulaWeights.length) return SCORE_COMPONENTS
-  return SCORE_COMPONENTS.map((c) => ({
-    ...c,
-    max: parseFloat((getW(formulaWeights, c.formulaKey) * 100).toFixed(2)) || c.max,
-  }))
+  const withLive = SCORE_COMPONENTS.map((c, i) => {
+    const fw = findFormula(formulaWeights, c.formulaKey)
+    return {
+      ...c,
+      label: fw?.label || c.label,
+      max: parseFloat(((fw ? fw.bobot / 100 : 0) * 100).toFixed(2)),
+      // urutan asli dari Supabase kalau ada; kalau tidak, pertahankan urutan
+      // default (pakai index array sebagai fallback) supaya tetap stabil.
+      _urutan: fw?.urutan ?? i,
+    }
+  })
+  return withLive
+    .sort((a, b) => a._urutan - b._urutan)
+    .map(({ _urutan, ...c }) => c)
 }

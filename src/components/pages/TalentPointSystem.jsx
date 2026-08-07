@@ -268,21 +268,32 @@ function CompareTable({ profiles }) {
 function AnalysisResult({ ranked, formulaWeights }) {
   const top = ranked[0]
   const components = getScoreComponents(formulaWeights)
+  // Ambil Maks tiap komponen dari `components` yang SAMA persis dengan yang dipakai
+  // tabel "Rincian Poin per Komponen" di bawah (dinamis, mengikuti bobot aktif di
+  // tab Formula) — sebelumnya nilai ini di-hardcode (20/12/12/12), jadi begitu bobot
+  // komponen diubah di tab Formula, perbandingan "kuatTop"/"needDevList" jadi salah
+  // (selalu false) dan seksi Rekomendasi tampak kosong walau datanya sebenarnya ada.
+  const maxOf = (key, fallback) => components.find((c) => c.key === key)?.max ?? fallback
+  const nbMax = maxOf('s_nb', 20)
+  const cliMax = maxOf('s_cli', 12)
+  const kpiMax = maxOf('s_kpi', 12)
+  const asMax = maxOf('s_as', 12)
+  const sanksiMax = maxOf('s_sanksi', 10)
+
   const gap = ranked.length > 1 ? top.totalScore - ranked[ranked.length - 1].totalScore : 0
   const promoList = ranked.filter((p) => p.ninebox && (p.ninebox.toUpperCase().includes('HIGH POTENTIAL') || p.ninebox.toUpperCase().includes('PROMOTABLE')))
-  const needDevList = ranked.filter((p) => p.s_cli < 12 * 0.7 || p.s_kpi < 12 * 0.7)
+  const needDevList = ranked.filter((p) => p.s_cli < cliMax * 0.7 || p.s_kpi < kpiMax * 0.7)
   const sanksiList = ranked.filter((p) => {
     const s = String(p.sanksi || '').toLowerCase().trim()
     const noSanksi = !s || s === '—' || s === 'null' || s === 'none' || s === '-' || s === 'nihil' || s === 'bersih' || s.includes('tidak ada') || s === 'tidak'
     return !noSanksi
   })
-  const sanksiMax = components.find((c) => c.key === 's_sanksi')?.max || 10
   const kuatTop = [
-    top.s_nb >= 20 * 0.8 ? `9-Box (${top.s_nb}/20)` : '',
-    top.s_cli >= 12 * 0.8 ? `CLI (${top.s_cli}/12)` : '',
-    top.s_kpi >= 12 * 0.8 ? `KPI (${top.s_kpi}/12)` : '',
+    top.s_nb >= nbMax * 0.8 ? `9-Box (${top.s_nb}/${nbMax})` : '',
+    top.s_cli >= cliMax * 0.8 ? `CLI (${top.s_cli}/${cliMax})` : '',
+    top.s_kpi >= kpiMax * 0.8 ? `KPI (${top.s_kpi}/${kpiMax})` : '',
     top.s_sanksi >= sanksiMax ? `Bersih sanksi (${top.s_sanksi})` : '',
-    top.s_as >= 12 * 0.8 ? `Asesmen (${top.s_as}/12)` : '',
+    top.s_as >= asMax * 0.8 ? `Asesmen (${top.s_as}/${asMax})` : '',
   ].filter(Boolean).join(', ')
 
   return (
@@ -404,7 +415,7 @@ function AnalysisResult({ ranked, formulaWeights }) {
           <div style={{ padding: '10px 14px', background: 'rgba(217,119,6,.05)', borderRadius: 9, borderLeft: '3px solid var(--accent3)' }}>
             <div style={{ fontWeight: 700, fontSize: 11.5, color: 'var(--accent3)', marginBottom: 3 }}>Prioritas Pengembangan Kompetensi</div>
             <div style={{ fontSize: 12, color: 'var(--text)' }}>
-              {needDevList.map((p) => `${p.nama} (CLI: ${p.s_cli}/12, KPI: ${p.s_kpi}/12)`).join(' · ')}
+              {needDevList.map((p) => `${p.nama} (CLI: ${p.s_cli}/${cliMax}, KPI: ${p.s_kpi}/${kpiMax})`).join(' · ')}
             </div>
           </div>
         )}
