@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Topbar from '../Topbar.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
+import { useSelectedEmployee } from '../../context/SelectedEmployeeContext.jsx'
 import { getTalentProfile, searchKaryawan } from '../../lib/talentProfileApi.js'
 import { isDataLockedToSelf } from '../../data/navItems.js'
 
@@ -18,6 +19,7 @@ function CliTable({ items }) {
         <table>
           <thead>
             <tr>
+              <th style={{ textAlign: 'center', width: 36 }}>No</th>
               <th>Kompetensi</th>
               <th style={{ textAlign: 'center' }}>Hasil</th>
             </tr>
@@ -25,6 +27,7 @@ function CliTable({ items }) {
           <tbody>
             {items.map((it, i) => (
               <tr key={i}>
+                <td style={{ textAlign: 'center', color: 'var(--dim)' }}>{i + 1}</td>
                 <td>{it.nama_kompetensi}</td>
                 <td style={{ textAlign: 'center' }}>
                   <span className={`type-pill ${it.hasil === 1 ? 'type-q' : 'type-nq'}`}>
@@ -56,6 +59,9 @@ function CliTable({ items }) {
 export default function Kompetensi() {
   const { user } = useAuth()
   const lockedToSelf = isDataLockedToSelf(user?.role)
+  // NIK yang sedang dipilih dipakai bersama dg Talent Profile & Asesmen, supaya
+  // karyawan yang dicari/dipilih di Talent Profile ikut otomatis tampil di sini.
+  const { selectedNik, setSelectedNik } = useSelectedEmployee()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
   const [selected, setSelected] = useState(null)
@@ -70,6 +76,18 @@ export default function Kompetensi() {
       .then(setSelected)
       .finally(() => setLoading(false))
   }, [lockedToSelf, user?.nik])
+
+  // Ikuti NIK yang sedang dipilih secara global (mis. dari Talent Profile).
+  // Kalau NIK yang sedang ditampilkan di sini sudah sama, tidak perlu fetch ulang.
+  useEffect(() => {
+    if (lockedToSelf) return
+    if (!selectedNik) return
+    if (selected?.karyawan?.nik === selectedNik) return
+    setLoading(true)
+    getTalentProfile(selectedNik)
+      .then(setSelected)
+      .finally(() => setLoading(false))
+  }, [lockedToSelf, selectedNik]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleInput(e) {
     const v = e.target.value
@@ -93,6 +111,7 @@ export default function Kompetensi() {
     try {
       const data = await getTalentProfile(row.nik)
       setSelected(data)
+      setSelectedNik(row.nik) // sync ke context global, ikut tampil di Talent Profile & Asesmen
     } finally {
       setLoading(false)
     }
@@ -154,12 +173,13 @@ export default function Kompetensi() {
               <div className="card">
                 <div className="card-title">Hard Competency</div>
                 <CliTable items={selected.cliHard.items} />
+                <div style={{ fontSize: 10.5, color: 'var(--dim)', lineHeight: 1.5 }}>
+              <strong>Keterangan:</strong>  <strong>Tercapai</strong> diartikan bahwa telah mencapai kompetensi
+              dimaksud, <strong>Tidak Tercapai</strong> diartikan bahwa tidak mencapai kompetensi dimaksud.
+            </div>
               </div>
             </div>
-            <div style={{ fontSize: 10.5, color: 'var(--dim)', lineHeight: 1.5 }}>
-              <strong>Keterangan:</strong> nilai <strong>1</strong> diartikan bahwa telah mencapai kompetensi
-              dimaksud, nilai <strong>0</strong> diartikan bahwa tidak mencapai kompetensi dimaksud.
-            </div>
+            
           </div>
         )}
       </div>

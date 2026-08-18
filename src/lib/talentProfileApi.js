@@ -75,7 +75,7 @@ export async function uploadProfilePhoto(nik, file) {
     // supabase/schema.sql (SQL Editor) untuk membuat bucket + policy-nya.
     if (/bucket not found/i.test(uploadError.message || '')) {
       throw new Error(
-        'Storage bucket "profile-photos" belum ada di project Supabase ini. Minta admin menjalankan bagian STORAGE pada supabase/schema.sql lewat Supabase SQL Editor, lalu coba lagi.'
+        'error'
       )
     }
     throw uploadError
@@ -106,9 +106,20 @@ export async function removeProfilePhoto(nik) {
 // update profil sendiri" di supabase/schema.sql.
 const SELF_EDITABLE_FIELDS = ['grup', 'unit_kerja', 'level_jabatan', 'golongan', 'pendidikan']
 
-/** Update data identitas milik sendiri (Grup Job Function, Unit Kerja, Level Jabatan, Golongan, Pendidikan). */
-export async function updateOwnProfile(nik, fields) {
+/**
+ * Update data identitas milik sendiri (Grup Job Function, Unit Kerja, Level Jabatan,
+ * Golongan, Pendidikan).
+ *
+ * CATATAN: role 'user' TIDAK diperbolehkan mengubah Data Diri sendiri (field-field
+ * ini dianggap data resmi yang hanya boleh diubah admin/SDM Unit Kerja). Guard ini
+ * sengaja diletakkan di sini juga (bukan cuma disembunyikan di UI EditProfile.jsx)
+ * supaya tetap tertutup walau fungsi ini dipanggil langsung.
+ */
+export async function updateOwnProfile(nik, fields, role) {
   if (!nik) throw new Error('NIK belum terhubung ke akun Anda — hubungi admin.')
+  if (String(role || '').toLowerCase() === 'user') {
+    throw new Error('Data Diri hanya bisa diubah oleh admin/SDM Unit Kerja. Hubungi admin untuk perubahan.')
+  }
   const payload = {}
   for (const key of SELF_EDITABLE_FIELDS) {
     if (key in fields) payload[key] = fields[key]?.trim ? fields[key].trim() : fields[key]
@@ -116,6 +127,85 @@ export async function updateOwnProfile(nik, fields) {
   if (Object.keys(payload).length === 0) return
   const { error } = await supabase.from('karyawan').update(payload).eq('nik', nik)
   if (error) throw error
+}
+
+/**
+ * Hapus satu riwayat employee_history milik SENDIRI yang ditambahkan lewat
+ * Edit Profile (sumber='self'). Sengaja dibatasi ke sumber='self' + nik milik
+ * sendiri di sisi aplikasi maupun RLS (lihat policy "employee_history: user
+ * boleh hapus riwayat sendiri" di supabase/schema.sql) — supaya user tidak
+ * bisa menghapus riwayat resmi (sumber='official') yang diunggah admin.
+ */
+export async function deleteOwnEmployeeHistory(id, nik) {
+  if (!nik) throw new Error('NIK belum terhubung ke akun Anda — hubungi admin.')
+  if (!id) throw new Error('ID riwayat tidak valid.')
+  const { error } = await supabase
+    .from('employee_history')
+    .delete()
+    .eq('id', id)
+    .eq('nik', nik)
+    .eq('sumber', 'self')
+  if (error) throw error
+}
+
+/**
+ * Ganti status Reguler <-> Top pada satu riwayat employee_history MILIK
+ * SENDIRI (sumber='self') yang sudah tersimpan — dipakai tombol toggle
+ * Reguler/Top di kolom "Tambah Employee History" pada Edit Profile, supaya
+ * status Top bisa diganti kapan saja tanpa perlu hapus lalu isi ulang
+ * (mis. "balap karung" hari ini Top, besok mau ditukar jadi Reguler).
+ *
+ * Status Top bukan kolom terpisah, melainkan suffix " (Top History)" di
+ * kolom achievement (lihat TOP_HISTORY_RE) — jadi fungsi ini cukup
+ * menambah/membuang suffix itu. Kuota "hanya 1 Top per jenis (kategori)"
+ * divalidasi ULANG di sini (bukan cuma di UI) supaya tetap aman kalau
+ * fungsi ini dipanggil langsung: kalau mau jadikan Top tapi jenis ini sudah
+ * punya Top lain yang masih aktif, tolak dan minta lepas dulu.
+ */
+export async function setEmployeeHistoryTop(id, nik, makeTop) {
+  if (!nik) throw new Error('NIK belum terhubung ke akun Anda — hubungi admin.')
+  if (!id) throw new Error('ID riwayat tidak valid.')
+
+  const { data: row, error: fetchError } = await supabase
+    .from('employee_history')
+    .select('id, nik, kategori, achievement, sumber')
+    .eq('id', id)
+    .eq('nik', nik)
+    .eq('sumber', 'self')
+    .maybeSingle()
+  if (fetchError) throw fetchError
+  if (!row) throw new Error('Riwayat tidak ditemukan atau bukan milik Anda.')
+
+  const isCurrentlyTop = TOP_HISTORY_RE.test(row.achievement || '')
+  if (makeTop === isCurrentlyTop) return row
+
+  if (makeTop) {
+    const { data: siblings, error: siblingError } = await supabase
+      .from('employee_history')
+      .select('id, achievement')
+      .eq('nik', nik)
+      .eq('kategori', row.kategori)
+      .eq('hidden', false)
+    if (siblingError) throw siblingError
+    const hasOtherTop = (siblings || []).some((r) => r.id !== id && TOP_HISTORY_RE.test(r.achievement || ''))
+    if (hasOtherTop) {
+      throw new Error('Jenis ini sudah punya 1 Top yang aktif. Lepas/ganti Top yang ada dulu sebelum memilih Top baru.')
+    }
+  }
+
+  const newAchievement = makeTop
+    ? `${(row.achievement || '').replace(TOP_HISTORY_RE, '')} (Top History)`
+    : (row.achievement || '').replace(TOP_HISTORY_RE, '')
+
+  const { error: updateError } = await supabase
+    .from('employee_history')
+    .update({ achievement: newAchievement })
+    .eq('id', id)
+    .eq('nik', nik)
+    .eq('sumber', 'self')
+  if (updateError) throw updateError
+
+  return { ...row, achievement: newAchievement }
 }
 
 /**

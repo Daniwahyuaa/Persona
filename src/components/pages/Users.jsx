@@ -1,11 +1,45 @@
 import { useEffect, useState } from 'react'
 import Icon from '../Icon.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { listProfiles, adminUpdateRole, adminUpdateNik, adminResetPassword, adminDeleteUser } from '../../lib/adminUsersApi.js'
+import { listProfiles, adminUpdateRole, adminUpdateNik, adminResetPassword, adminDeleteUser, adminUnlockAccount } from '../../lib/adminUsersApi.js'
 import { searchKaryawan } from '../../lib/talentProfileApi.js'
 
 const ROLE_LABEL = { superadmin: 'Super Admin', admin: 'Admin', executive: 'Executive', user: 'User' }
 const ROLE_BADGE = { superadmin: 'badge-un', admin: 'badge-pr', executive: 'badge-sc', user: 'badge-null' }
+
+// Dianggap "online" kalau last_seen (di-update tiap 60 detik oleh heartbeat
+// selama app terbuka, lihat AuthContext.jsx) masih dalam 3 menit terakhir.
+const ONLINE_THRESHOLD_MS = 3 * 60 * 1000
+
+function formatLastSeen(lastSeen) {
+  if (!lastSeen) return 'Belum pernah login'
+  const d = new Date(lastSeen)
+  const diffMs = Date.now() - d.getTime()
+  if (diffMs < 60000) return 'Baru saja'
+  const diffMin = Math.round(diffMs / 60000)
+  if (diffMin < 60) return `${diffMin} menit lalu`
+  const diffHour = Math.round(diffMin / 60)
+  if (diffHour < 24) return `${diffHour} jam lalu`
+  return d.toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+function OnlineStatus({ lastSeen }) {
+  const isOnline = lastSeen && Date.now() - new Date(lastSeen).getTime() < ONLINE_THRESHOLD_MS
+  if (isOnline) {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: 'var(--accent)' }}>
+        <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block' }} />
+        Online
+      </span>
+    )
+  }
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--dim)' }} title={lastSeen ? new Date(lastSeen).toLocaleString('id-ID') : ''}>
+      <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--border2)', display: 'inline-block' }} />
+      {formatLastSeen(lastSeen)}
+    </span>
+  )
+}
 
 // Meniru hirarki di Edge Function admin-user-actions: superadmin boleh kelola
 // admin/executive/user (bukan superadmin lain); admin hanya boleh kelola 'user'.
@@ -183,6 +217,15 @@ function UserListTab() {
   }
   useEffect(load, [])
 
+  // Refresh ringan tiap 30 detik supaya status "Online"/"Terakhir online" ikut
+  // update tanpa perlu reload manual (tidak menimpa perubahan lain di rows
+  // karena hanya dipakai untuk re-render — data tetap dari load() terakhir).
+  const [, forceTick] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => forceTick((n) => n + 1), 30000)
+    return () => clearInterval(t)
+  }, [])
+
   function showToast(msg) {
     setToast(msg)
     setTimeout(() => setToast(''), 3200)
@@ -231,6 +274,19 @@ function UserListTab() {
     }
   }
 
+  async function handleUnlock(row) {
+    setBusyId(row.id)
+    try {
+      await adminUnlockAccount(row.id)
+      setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, locked: false, failed_login_attempts: 0 } : r)))
+      showToast(`✅ Akun ${row.nama || row.username} dibuka kembali`)
+    } catch (e) {
+      showToast('❌ ' + e.message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   async function handleDelete() {
     const target = delModalTarget
     setBusyId(target.id)
@@ -251,7 +307,9 @@ function UserListTab() {
       <div className="card">
         <div className="card-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center' }}>
-            <div className="card-title-icon" style={{ background: '#ede9fe' }}>👑</div>
+            <div className="card-title-icon" style={{ background: '#ede9fe', color: '#6d28d9' }}>
+              <Icon name="userCog" size={12} strokeWidth={2.4} />
+            </div>
             Daftar User
           </div>
         </div>
@@ -287,6 +345,8 @@ function UserListTab() {
                   <th>Nama</th>
                   <th style={{ textAlign: 'center' }}>Role</th>
                   <th>NIK</th>
+                  <th style={{ textAlign: 'center' }}>Status</th>
+                  <th style={{ textAlign: 'center' }}>Online</th>
                   <th style={{ textAlign: 'center' }}>Aksi</th>
                 </tr>
               </thead>
@@ -331,7 +391,28 @@ function UserListTab() {
                           r.nik || '—'
                         )}
                       </td>
+                      <td style={{ textAlign: 'center' }}>
+                        {r.locked ? (
+                          <span className="badge badge-un" title={`${r.failed_login_attempts ?? 3}x gagal login berturut-turut`}>
+                            🔒 Terkunci
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: 11, color: 'var(--dim)' }}>—</span>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <OnlineStatus lastSeen={r.last_seen} />
+                      </td>
                       <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                        {r.locked && (
+                          <button
+                            disabled={!editable || rowBusy}
+                            onClick={() => handleUnlock(r)}
+                            style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid var(--accent)', background: 'transparent', color: editable ? 'var(--accent)' : 'var(--dim)', fontSize: 11, cursor: editable ? 'pointer' : 'not-allowed', marginRight: 6 }}
+                          >
+                            Buka Kunci
+                          </button>
+                        )}
                         <button
                           disabled={!editable || rowBusy}
                           onClick={() => setPwModalTarget(r)}

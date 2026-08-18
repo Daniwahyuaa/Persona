@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
+import { useTheme } from '../context/ThemeContext.jsx'
+import { useSelectedEmployee } from '../context/SelectedEmployeeContext.jsx'
 import { isDataLockedToSelf } from '../data/navItems.js'
 import {
   getKaryawanFilterOptions,
@@ -8,6 +10,7 @@ import {
 } from '../lib/talentProfileApi.js'
 import Topbar from './Topbar.jsx'
 import Icon from './Icon.jsx'
+import { navigateToMenu } from '../lib/navigate.js'
 
 // Grid referensi 9-Box (9 sel tetap + legenda), disalin persis dari NINEBOX_GRID /
 // NINEBOX_LEGEND di index.html asli (tpRenderNineboxGrid()).
@@ -46,6 +49,21 @@ function TipePill({ v }) {
       {v}
     </span>
   )
+}
+
+// Hitung usia real-time dari tanggal lahir (bukan angka statis dari kolom
+// karyawan.usia yang bisa basi) — jadi otomatis nambah begitu ultah lewat,
+// setiap kali halaman ini dibuka.
+function calculateAge(tglLahir) {
+  if (!tglLahir) return null
+  const dob = new Date(tglLahir)
+  if (Number.isNaN(dob.getTime())) return null
+  const now = new Date()
+  let age = now.getFullYear() - dob.getFullYear()
+  const beforeBirthdayThisYear =
+    now.getMonth() < dob.getMonth() || (now.getMonth() === dob.getMonth() && now.getDate() < dob.getDate())
+  if (beforeBirthdayThisYear) age -= 1
+  return age >= 0 ? age : null
 }
 
 function IdentityItem({ label, value }) {
@@ -168,36 +186,129 @@ function CareerJourneyTimeline({ items }) {
   )
 }
 
-function KpiSparkline({ data }) {
-  if (!data || data.length < 2) return null
-  const w = 220
-  const h = 90
-  const pad = 8
+// Diagram KPI: line chart dgn area terisi + sumbu Y (grid & label) + label
+// tahun di sumbu X — meniru tampilan referensi (bukan sparkline tipis tanpa
+// sumbu seperti sebelumnya). Skala sumbu otomatis menyesuaikan skor tertinggi
+// (dibulatkan ke kelipatan rapi) supaya tetap valid walau skala KPI berubah.
+function niceAxisMax(rawMax) {
+  if (rawMax <= 100) return 100
+  const magnitude = Math.pow(10, Math.floor(Math.log10(rawMax)))
+  return Math.ceil(rawMax / magnitude) * magnitude
+}
+
+function KpiChart({ data }) {
+  if (!data || data.length === 0) return null
+  const w = 320
+  const h = 210
+  const padL = 34
+  const padR = 8
+  const padT = 10
+  const padB = 24
+  const innerW = w - padL - padR
+  const innerH = h - padT - padB
+  const n = data.length
   const vals = data.map((d) => Number(d.skor) || 0)
-  const min = Math.min(...vals)
-  const max = Math.max(...vals)
-  const range = max - min || 1
-  const points = vals
-    .map((v, i) => {
-      const x = pad + (i / (vals.length - 1)) * (w - pad * 2)
-      const y = h - pad - ((v - min) / range) * (h - pad * 2)
-      return `${x},${y}`
-    })
-    .join(' ')
+  const axisMax = niceAxisMax(Math.max(...vals, 0))
+  const ticksCount = 5
+  const step = axisMax / ticksCount
+
+  const xFor = (i) => (n === 1 ? padL + innerW / 2 : padL + (i / (n - 1)) * innerW)
+  const yFor = (v) => padT + innerH - (Math.min(v, axisMax) / axisMax) * innerH
+
+  const linePoints = data.map((d, i) => `${xFor(i)},${yFor(Number(d.skor) || 0)}`).join(' ')
+  const areaPoints = `${xFor(0)},${padT + innerH} ${linePoints} ${xFor(n - 1)},${padT + innerH}`
+
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h}>
-      <polyline points={points} fill="none" stroke="var(--accent)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
-      {vals.map((v, i) => {
-        const x = pad + (i / (vals.length - 1)) * (w - pad * 2)
-        const y = h - pad - ((v - min) / range) * (h - pad * 2)
-        return <circle key={i} cx={x} cy={y} r="3" fill="var(--accent)" />
+    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} style={{ overflow: 'visible', display: 'block' }}>
+      {Array.from({ length: ticksCount + 1 }).map((_, i) => {
+        const val = axisMax - i * step
+        const y = padT + (i / ticksCount) * innerH
+        return (
+          <g key={i}>
+            <line x1={padL} x2={w - padR} y1={y} y2={y} stroke="var(--border2)" strokeWidth="1" />
+            <text x={padL - 8} y={y + 3} fontSize="9.5" textAnchor="end" fill="var(--dim)" fontFamily="var(--font-b)">
+              {Math.round(val)}
+            </text>
+          </g>
+        )
       })}
+      <polygon points={areaPoints} fill="var(--accent)" opacity="0.13" />
+      <polyline points={linePoints} fill="none" stroke="var(--accent)" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round" />
+      {data.map((d, i) => (
+        <circle key={d.tahun} cx={xFor(i)} cy={yFor(Number(d.skor) || 0)} r="5.5" fill="var(--accent)" stroke="var(--bg2)" strokeWidth="2" />
+      ))}
+      {data.map((d, i) => (
+        <text key={d.tahun} x={xFor(i)} y={h - 6} fontSize="11" fontWeight="700" textAnchor="middle" fill="var(--text)" fontFamily="var(--font-b)">
+          {d.tahun}
+        </text>
+      ))}
     </svg>
+  )
+}
+
+// Daftar skor per tahun di sisi kanan kartu KPI, kotak abu-abu netral +
+// angka besar hijau tebal — persis gaya referensi (bukan baris teks tipis).
+function KpiYearList({ data }) {
+  const ordered = data.slice().reverse()
+  return (
+    <div className="tp-kpi-list" style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingLeft: 20, borderLeft: '1.5px solid var(--border2)' }}>
+      {ordered.map((kp) => (
+        <div key={kp.tahun} style={{ background: 'var(--bg3)', borderRadius: 10, padding: '10px 16px' }}>
+          <div style={{ fontSize: 11.5, color: 'var(--dim)', fontWeight: 600, marginBottom: 4 }}>{kp.tahun}</div>
+          <div style={{ fontSize: 21, fontWeight: 800, color: 'var(--accent)', lineHeight: 1.1 }}>{kp.skor ?? '—'}</div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// Aspirasi Diri disimpan sbg 1 string gabungan mis. "☐ Promosi, ☐ Training/
+// Sertifikasi, ☐ Program Pengembangan Lainnya (sebutkan: )" — dipecah per item
+// (delimiter kotak centang "☐"/"□") lalu ditampilkan sbg daftar poin (•) vertikal
+// ke bawah, bukan satu baris panjang bersambung koma.
+function parseAspirasiItems(text) {
+  if (!text) return []
+  return String(text)
+    .split(/[☐□]/)
+    .map((s) => s.trim().replace(/,\s*$/, '').trim())
+    .filter(Boolean)
+}
+
+function AspirasiList({ text }) {
+  const items = parseAspirasiItems(text)
+  if (items.length === 0) return <div>{text}</div>
+  return (
+    <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {items.map((item, i) => (
+        <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+          <span style={{ flexShrink: 0, marginTop: 6, width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)' }} />
+          <span>{item}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+// Tautan teks "SGN CONEXT" yang bisa diklik untuk langsung pindah ke menu
+// SGN Conext (dipakai di kartu Aspirasi Diri saat data belum diisi).
+function SgnConextLink() {
+  return (
+    <button
+      type="button"
+      onClick={() => navigateToMenu('sgn')}
+      style={{
+        background: 'none', border: 'none', padding: 0, margin: 0, cursor: 'pointer',
+        color: 'var(--accent)', fontWeight: 700, textDecoration: 'underline', fontSize: 'inherit', fontFamily: 'inherit',
+      }}
+    >
+      SGN CONEXT
+    </button>
   )
 }
 
 export default function TalentProfile() {
   const { user } = useAuth()
+  const { theme, toggleTheme } = useTheme()
   const lockedToSelf = isDataLockedToSelf(user?.role)
 
   const [filterOptions, setFilterOptions] = useState({ grup: [], unitKerja: [], level: [] })
@@ -208,7 +319,9 @@ export default function TalentProfile() {
 
   const [results, setResults] = useState([])
   const [searching, setSearching] = useState(false)
-  const [selectedNik, setSelectedNik] = useState(lockedToSelf ? user?.nik || null : null)
+  // NIK yang sedang dipilih disimpan di context GLOBAL, supaya kalau user
+  // pindah ke halaman Asesmen atau CLI, karyawan yang sama tetap tampil di sana.
+  const { selectedNik, setSelectedNik } = useSelectedEmployee()
 
   const [profile, setProfile] = useState(null)
   const [loadingProfile, setLoadingProfile] = useState(false)
@@ -259,7 +372,11 @@ export default function TalentProfile() {
 
   return (
     <div>
-      <Topbar icon="user" title="Talent Profile" />
+      <Topbar
+        icon="user"
+        title="Talent Profile"
+       
+      />
       <div className="content">
         <div id="tp-page">
           {/* -- Search panel -- */}
@@ -372,17 +489,29 @@ export default function TalentProfile() {
                   <div className="tp-profile-info" style={{ flex: 1, padding: '20px 22px' }}>
                     <div style={{ fontFamily: 'var(--font-d)', fontSize: 26, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>{k.nama}</div>
                     <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', marginBottom: 12 }}>{k.posisi}</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(160px,1fr))', gap: 8 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(175px,1fr))', gap: 10 }}>
                       <IdentityItem label="NIK" value={k.nik} />
                       <IdentityItem label="Grup Job Function" value={k.grup} />
                       <IdentityItem label="Unit Kerja" value={k.unit_kerja} />
                       <IdentityItem label="Level Jabatan" value={k.level_jabatan} />
-                      <IdentityItem label="Golongan" value={k.golongan} />
                       <IdentityItem label="Pendidikan" value={k.pendidikan} />
+                      <IdentityItem label="Jenis Kelamin" value={k.jenis_kelamin} />
+                      <IdentityItem
+                        label="Usia"
+                        value={(() => {
+                          const liveAge = calculateAge(k.tgl_lahir)
+                          const age = liveAge != null ? liveAge : k.usia
+                          return age != null && age !== '' ? `${age} tahun` : null
+                        })()}
+                      />
                     </div>
                     <div style={{ fontSize: 10, color: 'var(--dim)', lineHeight: 1.5, marginTop: 10 }}>
-                      *) Data di atas bisa Anda perbarui sendiri lewat menu <strong>Edit Profile</strong>. Untuk data resmi
-                      dari SAP (di luar field yang bisa diedit sendiri), hubungi SDM Unit Kerja masing-masing.
+                      {String(user?.role || '').toLowerCase() === 'user' ? (
+                        <>*) Data di atas adalah data resmi. Untuk perubahan, hubungi <strong>SDM Unit Kerja</strong> masing-masing.</>
+                      ) : (
+                        <>*) Data di atas bisa diperbarui lewat menu <strong>Edit Profile</strong>. Untuk data resmi
+                        dari SAP (di luar field yang bisa diedit), hubungi SDM Unit Kerja masing-masing.</>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -471,27 +600,18 @@ export default function TalentProfile() {
 
                   <div className="card">
                     <div className="card-title">Hasil KPI</div>
-                    <div style={{ fontSize: 11, color: 'var(--dim)', lineHeight: 1.5, marginBottom: profile.kpiRiwayat.length ? 12 : 0 }}>
+                    <div style={{ fontSize: 11, color: 'var(--dim)', lineHeight: 1.5, marginBottom: profile.kpiRiwayat.length ? 14 : 0 }}>
                       Skor performa kerja yang diukur setiap tahun.
                     </div>
                     {profile.kpiRiwayat.length > 0 && (
-                      <div className="tp-kpi-grid" style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 20, alignItems: 'start' }}>
+                      <div className="tp-kpi-grid" style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 4, alignItems: 'start' }}>
                         <div>
                           <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--dim)', marginBottom: 8 }}>
                             Tren Skor KPI
                           </div>
-                          <KpiSparkline data={profile.kpiRiwayat} />
+                          <KpiChart data={profile.kpiRiwayat} />
                         </div>
-                        <div className="tp-kpi-list" style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingLeft: 20, borderLeft: '1.5px solid var(--border2)' }}>
-                          {profile.kpiRiwayat.slice().reverse().map((kp) => (
-                            <div key={kp.tahun} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, gap: 8 }}>
-                              <span>KPI {kp.tahun}</span>
-                              <span style={{ fontWeight: 700 }}>
-                                {kp.skor ?? '—'} <span style={{ color: 'var(--dim)', fontWeight: 400 }}>({kp.perf_rating || '—'})</span>
-                              </span>
-                            </div>
-                          ))}
-                        </div>
+                        <KpiYearList data={profile.kpiRiwayat} />
                       </div>
                     )}
                   </div>
@@ -502,11 +622,21 @@ export default function TalentProfile() {
                   <div style={{ flex: 1, overflowY: 'auto', fontSize: 12 }}>
                     {k.aspirasi ? (
                       <>
-                        <div>{k.aspirasi}</div>
-                        {k.alasan && <div style={{ marginTop: 8, color: 'var(--dim)' }}>Alasan: {k.alasan}</div>}
+                        <AspirasiList text={k.aspirasi} />
+                        {k.alasan && (
+                          <div style={{ marginTop: 16 }}>
+                            <div style={{ fontWeight: 700, color: 'var(--text)' }}>Alasan</div>
+                            <div style={{ marginTop: 6, color: 'var(--dim)' }}>{k.alasan}</div>
+                          </div>
+                        )}
+                        <div style={{ marginTop: 16, fontSize: 10.5, color: 'var(--dim)' }}>
+                          *) Data diambil atas pengisian <SgnConextLink />
+                        </div>
                       </>
                     ) : (
-                      <div style={{ color: '#dc2626' }}>Data tidak ditemukan, silahkan Anda mengisi di SGN Conext</div>
+                      <div style={{ color: '#dc2626' }}>
+                        Data tidak ditemukan, silahkan Anda mengisi di <SgnConextLink />
+                      </div>
                     )}
                   </div>
                 </div>
@@ -526,9 +656,7 @@ export default function TalentProfile() {
               </div>
 
               {/* -- Employee History -- */}
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.7, color: 'var(--muted)', marginBottom: 10 }}>
-                Employee History
-              </div>
+              <div className="tp-outer-title" style={{ marginTop: 4 }}>Employee History</div>
               <div className="three-col">
                 <div className="card">
                   <div className="card-title">Development</div>
@@ -591,13 +719,13 @@ function CliMini({ cli, label }) {
   return (
     <div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-        <div style={{ background: 'var(--bg3)', borderRadius: 7, padding: 9, textAlign: 'center' }}>
-          <div style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--muted)', marginBottom: 4 }}>Diukur</div>
-          <div style={{ fontSize: 12.5, color: 'var(--text)' }}>{cli.diukur}</div>
+        <div style={{ background: '#fef9c3', border: '1px solid #eab308', borderRadius: 7, padding: 9, textAlign: 'center' }}>
+          <div style={{ fontSize: 9.5, fontWeight: 700, color: '#854d0e', marginBottom: 4 }}>Diukur</div>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: '#854d0e' }}>{cli.diukur}</div>
         </div>
-        <div style={{ background: 'var(--bg3)', borderRadius: 7, padding: 9, textAlign: 'center' }}>
-          <div style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--muted)', marginBottom: 4 }}>Tercapai</div>
-          <div style={{ fontSize: 12.5, color: 'var(--text)' }}>{cli.benar}</div>
+        <div style={{ background: '#dcfce7', border: '1px solid #22c55e', borderRadius: 7, padding: 9, textAlign: 'center' }}>
+          <div style={{ fontSize: 9.5, fontWeight: 700, color: '#15803d', marginBottom: 4 }}>Tercapai</div>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: '#15803d' }}>{cli.benar}</div>
         </div>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 9, background: 'var(--bg3)', borderRadius: 7 }}>

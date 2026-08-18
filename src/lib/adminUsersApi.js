@@ -2,7 +2,10 @@ import { supabase } from './supabaseClient.js'
 
 /** Daftar semua user (butuh RLS "profiles: admin/superadmin baca semua"). */
 export async function listProfiles() {
-  const { data, error } = await supabase.from('profiles').select('id, username, nama, role, nik').order('nama', { ascending: true })
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, username, nama, role, nik, locked, failed_login_attempts, last_seen')
+    .order('nama', { ascending: true })
   if (error) throw error
   return data || []
 }
@@ -33,4 +36,9 @@ export function adminResetPassword(targetId, newPassword) {
 
 export function adminDeleteUser(targetId) {
   return callAdminAction({ action: 'delete_user', targetId })
+}
+
+/** Buka kunci akun (habis 3x gagal login) tanpa mengganti password. */
+export function adminUnlockAccount(targetId) {
+  return callAdminAction({ action: 'unlock_account', targetId })
 }

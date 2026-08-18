@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import Topbar from '../Topbar.jsx'
 import RadarChart from '../RadarChart.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
+import { useSelectedEmployee } from '../../context/SelectedEmployeeContext.jsx'
 import { getTalentProfile, searchKaryawan } from '../../lib/talentProfileApi.js'
 import { avatarColor, initials } from '../../lib/avatar.js'
 import { isDataLockedToSelf } from '../../data/navItems.js'
@@ -11,6 +12,9 @@ const RCL = 3 // disalin dari index.html asli: RCL tetap = 3, khusus jenis asesm
 export default function Asesmen() {
   const { user } = useAuth()
   const lockedToSelf = isDataLockedToSelf(user?.role)
+  // NIK yang sedang dipilih dipakai bersama dg Talent Profile & CLI, supaya
+  // karyawan yang dicari/dipilih di Talent Profile ikut otomatis tampil di sini.
+  const { selectedNik, setSelectedNik } = useSelectedEmployee()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
   const [selected, setSelected] = useState(null)
@@ -25,6 +29,18 @@ export default function Asesmen() {
       .then(setSelected)
       .finally(() => setLoading(false))
   }, [lockedToSelf, user?.nik])
+
+  // Ikuti NIK yang sedang dipilih secara global (mis. dari Talent Profile).
+  // Kalau NIK yang sedang ditampilkan di sini sudah sama, tidak perlu fetch ulang.
+  useEffect(() => {
+    if (lockedToSelf) return
+    if (!selectedNik) return
+    if (selected?.karyawan?.nik === selectedNik) return
+    setLoading(true)
+    getTalentProfile(selectedNik)
+      .then(setSelected)
+      .finally(() => setLoading(false))
+  }, [lockedToSelf, selectedNik]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleInput(e) {
     const v = e.target.value
@@ -48,6 +64,7 @@ export default function Asesmen() {
     try {
       const data = await getTalentProfile(row.nik)
       setSelected(data)
+      setSelectedNik(row.nik) // sync ke context global, ikut tampil di Talent Profile & CLI
     } finally {
       setLoading(false)
     }

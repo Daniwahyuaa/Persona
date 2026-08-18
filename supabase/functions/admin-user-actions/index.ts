@@ -102,6 +102,21 @@ Deno.serve(async (req) => {
       }
       const { error } = await admin.auth.admin.updateUserById(targetId, { password: newPassword })
       if (error) return json({ error: error.message }, 500)
+      // Password baru dari admin/superadmin otomatis membuka kunci akun (kalau
+      // sebelumnya terkunci karena 3x gagal login) & menormalkan counter-nya,
+      // supaya user tidak langsung terkunci lagi begitu mencoba login ulang.
+      await admin.from('profiles').update({ failed_login_attempts: 0, locked: false, locked_at: null }).eq('id', targetId)
+      return json({ ok: true })
+    }
+
+    if (action === 'unlock_account') {
+      // Buka kunci akun TANPA mengganti password (mis. NIK/password sebenarnya
+      // sudah benar, tapi sempat salah ketik 3x). Counter kegagalan dinormalkan.
+      const { error } = await admin
+        .from('profiles')
+        .update({ failed_login_attempts: 0, locked: false, locked_at: null })
+        .eq('id', targetId)
+      if (error) return json({ error: error.message }, 500)
       return json({ ok: true })
     }
 

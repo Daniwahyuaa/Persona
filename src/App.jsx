@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from './context/AuthContext.jsx'
+import { useTheme } from './context/ThemeContext.jsx'
 import LoginScreen from './components/LoginScreen.jsx'
 import Sidebar from './components/Sidebar.jsx'
 import MainContent from './components/MainContent.jsx'
 import Icon from './components/Icon.jsx'
 import { getDefaultMenu, canAccessMenu } from './data/navItems.js'
 import { supabase } from './lib/supabaseClient.js'
+import sgnLogoColor from './assets/sgn-logo-color.png'
+import sgnLogoWhite from './assets/sgn-logo-white.png'
 
 export default function App() {
   const { user, checkingSession } = useAuth()
+  const { theme } = useTheme()
   const [activeMenu, setActiveMenu] = useState(null)
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -89,6 +93,23 @@ export default function App() {
     }
   }, [mobileOpen])
 
+  // Navigasi global lewat custom event "persona:navigate" — dipakai halaman
+  // manapun (mis. link "SGN CONEXT" di kartu Aspirasi Diri, Talent Profile)
+  // untuk pindah menu tanpa perlu prop-drilling activeMenu/setActiveMenu ke
+  // setiap komponen halaman lewat MainContent. Diletakkan SEBELUM early-return
+  // di bawah supaya urutan pemanggilan hooks tetap konsisten (Rules of Hooks).
+  useEffect(() => {
+    function onNavigate(e) {
+      const menuId = e.detail?.menuId
+      if (menuId && user?.role && canAccessMenu(user.role, menuId)) {
+        setActiveMenu(menuId)
+        setMobileOpen(false)
+      }
+    }
+    window.addEventListener('persona:navigate', onNavigate)
+    return () => window.removeEventListener('persona:navigate', onNavigate)
+  }, [user?.role])
+
   if (checkingSession) {
     return (
       <div className="loading-overlay">
@@ -152,6 +173,11 @@ export default function App() {
             komponen di dalamnya; scroll & interaksinya dimatikan lewat CSS
             (.mobile-sidebar-open .main) selama drawer terbuka. */}
         <div className="main">
+          <img
+            src={theme === 'dark' ? sgnLogoWhite : sgnLogoColor}
+            alt="Sinergi Gula Nusantara"
+            className="app-sgn-logo"
+          />
           <MainContent activeMenu={safeMenu} />
         </div>
       </div>

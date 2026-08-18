@@ -16,10 +16,9 @@ export const navSections = [
       { id: 'kompetensi', label: 'CLI', icon: 'target', roles: ALL_ROLES },
       { id: 'kamus', label: 'Kamus Kompetensi', icon: 'book', roles: ALL_ROLES },
       { id: '9box', label: 'Kategori 9Box', icon: 'grid', roles: ALL_ROLES },
-      // Edit Profile: dulu hanya untuk role 'user' (self-service tambah riwayat +
-      // foto sendiri). Sekarang admin & superadmin juga punya NIK/riwayat sendiri
-      // yang mau diisi, jadi menu ini dibuka untuk mereka juga.
-      { id: 'editprofile', label: 'Edit Profile', icon: 'edit', roles: ['user', 'admin', 'superadmin'] },
+      // Edit Profile: untuk role 'user' (self-service tambah riwayat + foto sendiri)
+      // dan 'admin'. Superadmin tidak menggunakan menu ini.
+      { id: 'editprofile', label: 'Edit Profile', icon: 'edit', roles: ['user', 'admin'] },
       { id: 'sgn', label: 'SGN Conext', icon: 'clock', roles: ALL_ROLES },
     ],
   },

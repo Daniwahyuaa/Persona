@@ -11,9 +11,20 @@ create table if not exists public.profiles (
   username text,           -- opsional, hanya label tampilan (bagian sebelum @ dari email)
   nama text,
   role text not null default 'user' check (role in ('superadmin','admin','executive','user')),
-  nik text,                -- kalau role='user', dipakai untuk filter data miliknya sendiri; diisi manual oleh admin setelah user daftar
+  nik text,                -- dipakai untuk LOGIN (pengganti email) & filter data milik sendiri kalau role='user'
+  failed_login_attempts int not null default 0,  -- reset ke 0 setiap kali login berhasil
+  locked boolean not null default false,          -- true setelah 3x gagal login berturut-turut
+  locked_at timestamptz,                          -- kapan akun dikunci, buat referensi admin
   created_at timestamptz not null default now()
 );
+
+-- Jaga-jaga kalau tabel profiles sudah pernah dibuat sebelum kolom-kolom ini ada.
+alter table public.profiles add column if not exists failed_login_attempts int not null default 0;
+alter table public.profiles add column if not exists locked boolean not null default false;
+alter table public.profiles add column if not exists locked_at timestamptz;
+
+-- NIK harus unik supaya lookup email-berdasar-NIK saat login tidak ambigu.
+create unique index if not exists profiles_nik_unique_idx on public.profiles (nik) where nik is not null;
 
 -- Trigger: setiap kali ada user BARU daftar sendiri lewat supabase.auth.signUp(),
 -- otomatis buat baris profiles dengan role default 'user'. Admin tinggal ubah
@@ -25,12 +36,13 @@ security definer
 set search_path = public
 as $$
 begin
-  insert into public.profiles (id, username, nama, role)
+  insert into public.profiles (id, username, nama, role, nik)
   values (
     new.id,
     split_part(new.email, '@', 1),
     coalesce(new.raw_user_meta_data->>'nama', split_part(new.email, '@', 1)),
-    'user'
+    'user',
+    new.raw_user_meta_data->>'nik'
   )
   on conflict (id) do nothing;
   return new;
@@ -300,21 +312,145 @@ create policy "employee_history: admin boleh update/hapus" on public.employee_hi
   for all using (public.current_role() in ('superadmin','admin'))
   with check (public.current_role() in ('superadmin','admin'));
 
+-- employee_history: user boleh HAPUS riwayat SENDIRI yang ditambahkan lewat
+-- Edit Profile (sumber='self') — dipakai tombol "Hapus" di kolom "Tambah
+-- Employee History". Riwayat resmi (sumber='official', dari upload admin)
+-- tetap TIDAK bisa dihapus user karena kondisi sumber='self' di bawah.
+create policy "employee_history: user boleh hapus riwayat sendiri" on public.employee_history
+  for delete
+  using (
+    sumber = 'self'
+    and nik = (select nik from public.profiles where id = auth.uid())
+  );
+
+-- employee_history: user boleh UPDATE riwayat SENDIRI yang ditambahkan lewat
+-- Edit Profile (sumber='self') — dipakai toggle Reguler/Top di kolom "Tambah
+-- Employee History" (mis. tukar status Top jadi Reguler atau sebaliknya
+-- tanpa perlu hapus lalu isi ulang). Tetap dibatasi ke sumber='self' + nik
+-- milik sendiri, sama seperti policy DELETE di atas — riwayat resmi
+-- (sumber='official') tidak bisa diubah user.
+create policy "employee_history: user boleh update riwayat sendiri" on public.employee_history
+  for update
+  using (
+    sumber = 'self'
+    and nik = (select nik from public.profiles where id = auth.uid())
+  )
+  with check (
+    sumber = 'self'
+    and nik = (select nik from public.profiles where id = auth.uid())
+  );
+
+-- requests: admin/superadmin boleh UPDATE (tandai "Selesai") & HAPUS permintaan
+-- di Kotak Masuk. Tanpa policy ini, tombol Selesai/Hapus akan diblokir RLS
+-- secara diam-diam meski sudah lolos policy SELECT di atas.
+create policy "requests: admin boleh update/hapus" on public.requests
+  for all using (public.current_role() in ('superadmin','admin'))
+  with check (public.current_role() in ('superadmin','admin'));
+
+-- formula: admin/superadmin boleh UBAH bobot & nilai dasar tiap tier lewat tab
+-- Formula (Talent Point System). Tanpa policy ini, UPDATE dari halaman akan
+-- diblokir RLS secara diam-diam meski sudah lolos policy SELECT di atas.
+create policy "formula: admin boleh update" on public.formula
+  for update
+  using (public.current_role() in ('superadmin','admin'))
+  with check (public.current_role() in ('superadmin','admin'));
+
 -- ─────────────────────────────────────────────────────────────
--- EDIT PROFILE — user/admin/superadmin boleh update DATA DIRI SENDIRI
--- (foto profil + grup/unit kerja/level jabatan/golongan/pendidikan) lewat
--- menu Edit Profile, dikunci ke baris karyawan yang NIK-nya sama dengan
--- profiles.nik milik akun yang login. Kolom lain (sanksi, ninebox, dst.)
--- tetap hanya bisa diubah admin lewat policy "karyawan: admin boleh tulis"
--- di atas — RLS Postgres tidak bisa membatasi per-kolom, jadi pembatasan
--- kolom yang boleh diubah dilakukan di sisi aplikasi (lihat
--- src/lib/talentProfileApi.js -> updateOwnProfile()), bukan di DB.
+-- EDIT PROFILE — admin/superadmin boleh update DATA DIRI SENDIRI (grup/unit
+-- kerja/level jabatan/golongan/pendidikan) + SEMUA role (termasuk 'user') tetap
+-- boleh update foto profil sendiri, lewat menu Edit Profile, dikunci ke baris
+-- karyawan yang NIK-nya sama dengan profiles.nik milik akun yang login.
+--
+-- CATATAN: RLS Postgres tidak bisa membatasi per-kolom, jadi baris di bawah ini
+-- tetap mengizinkan UPDATE pada seluruh row milik sendiri secara teknis. Yang
+-- membatasi role 'user' agar TIDAK BISA mengubah field Data Diri (grup/unit
+-- kerja/level jabatan/golongan/pendidikan) — hanya boleh foto profil — dilakukan
+-- di sisi aplikasi: lihat guard role di src/lib/talentProfileApi.js ->
+-- updateOwnProfile() dan UI di src/components/pages/EditProfile.jsx. Kolom lain
+-- (sanksi, ninebox, dst.) tetap hanya bisa diubah admin lewat policy
+-- "karyawan: admin boleh tulis" di atas.
 -- ─────────────────────────────────────────────────────────────
 drop policy if exists "karyawan: user boleh update profil sendiri" on public.karyawan;
 create policy "karyawan: user boleh update profil sendiri" on public.karyawan
   for update
   using (nik = (select nik from public.profiles where id = auth.uid()))
   with check (nik = (select nik from public.profiles where id = auth.uid()));
+
+-- ─────────────────────────────────────────────────────────────
+-- LOGIN PAKAI NIK + PEMBATASAN MAKSIMAL 3X GAGAL LOGIN
+-- Supabase Auth aslinya hanya mengenal email/phone, jadi 3 fungsi RPC di
+-- bawah ini menjembatani login dengan NIK dari layar Login (yang belum
+-- punya sesi sama sekali, jadi HARUS bisa dipanggil sebagai anon):
+--   1. get_login_email   -> cari email yg terhubung ke NIK + cek status kunci,
+--                            supaya browser bisa memanggil signInWithPassword().
+--   2. register_failed_login -> catat 1x kegagalan (password salah) untuk NIK
+--                            tsb; begitu mencapai 3x, akun otomatis dikunci
+--                            (locked = true) sampai di-reset admin/superadmin.
+--   3. reset_own_login_attempts -> dipanggil SETELAH login berhasil (sudah
+--                            authenticated) untuk menormalkan counter ke 0.
+-- SECURITY DEFINER dipakai karena RLS tabel profiles hanya izinkan baca baris
+-- sendiri; fungsi²  ini sengaja bypass RLS tapi outputnya dibatasi ketat
+-- (cuma email + status kunci, TIDAK ada data lain yang dibocorkan ke anon).
+-- ─────────────────────────────────────────────────────────────
+create or replace function public.get_login_email(p_nik text)
+returns table (email text, locked boolean, failed_login_attempts int)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select u.email, p.locked, p.failed_login_attempts
+  from public.profiles p
+  join auth.users u on u.id = p.id
+  where p.nik = p_nik
+  limit 1;
+$$;
+
+revoke all on function public.get_login_email(text) from public;
+grant execute on function public.get_login_email(text) to anon, authenticated;
+
+drop function if exists public.register_failed_login(text);
+
+create function public.register_failed_login(p_nik text)
+returns table (new_failed_login_attempts int, is_locked boolean)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_attempts int;
+  v_locked boolean;
+begin
+  update public.profiles as p
+  set failed_login_attempts = p.failed_login_attempts + 1,
+      locked = case when p.locked then true else (p.failed_login_attempts + 1) >= 3 end,
+      locked_at = case
+        when not p.locked and (p.failed_login_attempts + 1) >= 3 then now()
+        else p.locked_at
+      end
+  where p.nik = p_nik
+  returning p.failed_login_attempts, p.locked into v_attempts, v_locked;
+
+  return query select v_attempts, v_locked;
+end;
+$$;
+
+revoke all on function public.register_failed_login(text) from public;
+grant execute on function public.register_failed_login(text) to anon, authenticated;
+
+create or replace function public.reset_own_login_attempts()
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  update public.profiles
+  set failed_login_attempts = 0, locked = false, locked_at = null
+  where id = auth.uid();
+$$;
+
+revoke all on function public.reset_own_login_attempts() from public;
+grant execute on function public.reset_own_login_attempts() to authenticated;
 
 -- ─────────────────────────────────────────────────────────────
 -- STORAGE — bucket untuk foto profil.

@@ -1,40 +1,182 @@
 .login-screen {
   position: fixed;
   inset: 0;
-  background: linear-gradient(135deg, #f4f6f8, #eef1f4);
   z-index: 5000;
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: var(--font-b);
+  padding: 24px;
+  box-sizing: border-box;
+  overflow: hidden;
+
+  /* Latar belakang penuh: foto hamparan kebun tebu & pabrik SGN saat senja,
+     sebagai "backdrop" di belakang kartu login. Overlay gradient tipis di atas
+     foto supaya kartu & teks tetap kontras dan mudah dibaca. */
+  background:
+    linear-gradient(165deg, rgba(188, 220, 236, 0.35) 0%, rgba(207, 230, 238, 0.22) 32%, rgba(228, 236, 223, 0.18) 62%, rgba(242, 236, 217, 0.28) 100%),
+    url('../assets/login/login-bg.jpeg') center center / cover no-repeat;
+}
+html[data-theme='dark'] .login-screen {
+  /* Versi malam: foto yang sama dengan overlay gelap agar suasana senja/malam
+     tetap konsisten dengan panel form & panel foto pabrik di sebelahnya. */
+  background:
+    linear-gradient(165deg, rgba(5, 8, 16, 0.82) 0%, rgba(13, 21, 38, 0.78) 30%, rgba(33, 31, 58, 0.72) 58%, rgba(64, 44, 63, 0.68) 82%, rgba(107, 67, 49, 0.55) 100%),
+    url('../assets/login/login-bg.jpeg') center center / cover no-repeat;
+}
+
+/* Sedikit noise/vignette lembut supaya backdrop terasa berkabut, bukan gradient polos */
+.login-screen::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  backdrop-filter: blur(0px);
+  pointer-events: none;
+  background: radial-gradient(ellipse 70% 60% at 50% 40%, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0) 70%);
+}
+html[data-theme='dark'] .login-screen::before {
+  background: radial-gradient(ellipse 70% 60% at 50% 40%, rgba(0, 0, 0, 0.15), rgba(0, 0, 0, 0) 70%);
+}
+
+/* Tombol mode gelap/terang: bulat mengambang di pojok kiri atas, gaya glass
+   senada dengan login-card, supaya tidak bentrok dengan logo SGN di kanan atas. */
+.theme-toggle-fab {
+  position: fixed;
+  top: 18px;
+  left: 22px;
+  z-index: 5200;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: #1f2937;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s, border-color 0.2s;
+  box-shadow: 0 6px 18px rgba(10, 20, 35, 0.15);
+}
+.theme-toggle-fab:hover {
+  background: rgba(255, 255, 255, 0.55);
+  transform: translateY(-1px);
+}
+.theme-toggle-fab:active {
+  transform: translateY(0) scale(0.94);
+}
+html[data-theme='dark'] .theme-toggle-fab {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f1f5f9;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+html[data-theme='dark'] .theme-toggle-fab:hover {
+  background: rgba(0, 159, 45, 0.553);
+}
+@media (max-width: 768px) {
+  .theme-toggle-fab {
+    top: 10px;
+    left: 12px;
+    width: 36px;
+    height: 36px;
+  }
+}
+
+/* ===== Split card: ilustrasi kiri + form kanan (transparan/glass di kanan) ===== */
+.login-card {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: min(1000px, 100%);
+  max-height: 92vh;
+  border-radius: 22px;
+  overflow: hidden;
+  box-shadow: 0 25px 70px rgba(10, 20, 35, 0.244);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+}
+html[data-theme='dark'] .login-card {
+  box-shadow: 0 25px 70px rgba(0, 0, 0, 0.6);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.login-visual {
+  flex: 1 1 46%;
+  min-width: 0;
+  position: relative;
+  line-height: 0;
+}
+.login-visual-svg,
+.login-visual-photo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 480px;
+  object-fit: cover;
+  object-position: center;
+}
+
+/* Semua foto (siang & malam, masing-masing 2) ditumpuk pas di atas satu sama
+   lain (absolute), lalu opacity-nya di-crossfade lewat transition — baik saat
+   slideshow jalan otomatis dalam mode yang sama, maupun saat tema berganti. */
+.login-visual-photo {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 900ms ease;
+  will-change: opacity;
+}
+.login-visual-photo.is-visible {
+  opacity: 1;
+}
+
+/* Panel form: kaca buram (glassmorphism) supaya backdrop di belakang kartu
+   sedikit terlihat menerawang, seperti pada foto referensi. */
+.login-panel {
+  flex: 1 1 54%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 30px;
+  background: rgba(255, 255, 255, 0.371);
+  overflow-y: auto;
+}
+html[data-theme='dark'] .login-panel {
+  background: rgba(8, 10, 16, 0.338);
 }
 
 .login-box {
-  background: #fff;
-  border-radius: 16px;
-  padding: 36px 34px;
-  width: min(380px, 90vw);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
-}
-html[data-theme='dark'] .login-box {
-  background: #000;
+  width: min(380px, 100%);
 }
 
 .login-logo {
   text-align: center;
-  margin-bottom: 26px;
+  margin-bottom: 22px;
 }
 .login-logo img {
-  max-width: 286px;
+  max-width: 400px;
   width: 100%;
   height: auto;
   display: block;
   margin: 0 auto;
 }
 
-.login-field {
-  margin-bottom: 15px;
+.login-subtitle {
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--muted);
+  margin: -10px 0 20px;
+  line-height: 1.5;
 }
+
+.login-field {
+  margin-bottom: 14px;
+}
+
 .login-field label {
   font-size: 10.5px;
   font-weight: 700;
@@ -43,46 +185,134 @@ html[data-theme='dark'] .login-box {
   letter-spacing: 0.4px;
   display: block;
 }
-.login-field input,
-.login-field select {
+
+/* Field pill dengan ikon di dalam, meniru desain referensi (gaya kaca transparan) */
+.input-icon-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1.5px solid rgba(255, 255, 255, 0.6);
+  border-radius: 12px;
+  transition: border-color 0.13s, background 0.13s;
+}
+.input-icon-wrap:focus-within {
+  border-color: var(--accent);
+  background: rgba(255, 255, 255, 0.75);
+}
+html[data-theme='dark'] .input-icon-wrap {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+html[data-theme='dark'] .input-icon-wrap:focus-within {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--accent);
+}
+.input-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-left: 14px;
+  color: var(--dim);
+  flex-shrink: 0;
+}
+.input-icon-wrap input {
   width: 100%;
-  padding: 10px 12px;
-  border: 1.5px solid var(--border2);
-  border-radius: 8px;
-  margin-top: 5px;
+  padding: 13px 12px 13px 10px;
+  border: none;
+  background: transparent;
   box-sizing: border-box;
   font-family: var(--font-b);
   font-size: 13.5px;
   color: var(--text);
   outline: none;
-  transition: border-color 0.13s;
-  background: var(--bg2);
 }
-.login-field input:focus {
-  border-color: var(--accent);
+.input-icon-wrap input::placeholder {
+  color: var(--dim);
+}
+/* Varian select (dipakai HelpdeskModal untuk "Jenis Permintaan") — pakai
+   arrow custom biar konsisten dgn .fselect, bukan arrow bawaan browser. */
+.input-icon-wrap select {
+  width: 100%;
+  padding: 13px 30px 13px 10px;
+  border: none;
+  background: transparent;
+  box-sizing: border-box;
+  font-family: var(--font-b);
+  font-size: 13.5px;
+  color: var(--text);
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%239ca3af' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
 }
 
-.pwd-wrap {
-  position: relative;
+/* Field polos di dalam .login-field TANPA .input-icon-wrap (dipakai di
+   halaman Edit Profile — kartu "Tambah Employee History" & "Data Diri").
+   Tanpa aturan ini, <select>/<input> jatuh ke tampilan bawaan browser yang
+   kotak-kotak & tidak konsisten dengan gaya field lain di aplikasi. */
+.login-field > select,
+.login-field > input[type='text'],
+.login-field > input[type='number'] {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 6px;
+  padding: 11px 14px;
+  border: 1.5px solid var(--border2);
+  border-radius: 10px;
+  background: var(--bg2);
+  color: var(--text);
+  font-family: var(--font-b);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
-.pwd-wrap input {
-  padding-right: 38px !important;
+.login-field > select {
+  padding-right: 36px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%239ca3af' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 13px center;
 }
+.login-field > select:hover,
+.login-field > input[type='text']:hover,
+.login-field > input[type='number']:hover {
+  border-color: var(--dim);
+}
+.login-field > select:focus,
+.login-field > input[type='text']:focus,
+.login-field > input[type='number']:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(26, 110, 60, 0.12);
+}
+.login-field > input[type='text']::placeholder {
+  color: var(--dim);
+}
+/* Grid berisi field ini butuh sedikit jarak antar kolom/baris supaya tidak
+   terasa mepet — dipakai bareng gridTemplateColumns inline di EditProfile. */
+.editprofile-form-grid .login-field,
+.editprofile-datadiri-grid .login-field {
+  margin-bottom: 0;
+}
+
 .pwd-eye-btn {
-  position: absolute;
-  right: 6px;
-  top: 50%;
-  transform: translateY(calc(-50% + 2.5px));
   background: none;
   border: none;
   cursor: pointer;
   padding: 5px;
+  margin-right: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--dim);
   border-radius: 5px;
   transition: color 0.12s;
+  flex-shrink: 0;
 }
 .pwd-eye-btn:hover {
   color: var(--muted);
@@ -90,6 +320,24 @@ html[data-theme='dark'] .login-box {
 .pwd-eye-btn svg {
   width: 16px;
   height: 16px;
+}
+
+.forgot-pwd-link {
+  display: block;
+  margin: 2px auto 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+  width: 100%;
+  padding-top: 4px;
+}
+.forgot-pwd-link:hover {
+  color: var(--accent2);
+  text-decoration: underline;
 }
 
 .login-error {
@@ -121,16 +369,25 @@ html[data-theme='dark'] .login-box {
 
 .login-btn {
   width: 100%;
-  padding: 11px;
+  padding: 13px;
   background: var(--accent);
   color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: 12px;
   font-weight: 700;
   cursor: pointer;
   font-family: inherit;
-  font-size: 13.5px;
-  transition: opacity 0.13s;
+  font-size: 12px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  margin-top: 6px;
+  transition: opacity 0.13s, transform 0.13s;
+}
+.login-btn:hover:not(:disabled) {
+  opacity: 0.92;
+}
+.login-btn:active:not(:disabled) {
+  transform: translateY(1px);
 }
 .login-btn:hover {
   opacity: 0.9;
@@ -148,7 +405,7 @@ html[data-theme='dark'] .login-box {
   position: relative;
 }
 .login-divider span {
-  background: var(--bg2);
+  background: transparent;
   padding: 0 10px;
   position: relative;
   z-index: 1;
@@ -160,7 +417,7 @@ html[data-theme='dark'] .login-box {
   left: 0;
   right: 0;
   height: 1px;
-  background: var(--border2);
+  background: rgba(120, 130, 140, 0.35);
   z-index: 0;
 }
 
@@ -171,16 +428,27 @@ html[data-theme='dark'] .login-box {
   gap: 8px;
   width: 100%;
   padding: 10px;
-  border: 1.5px solid var(--border2);
-  border-radius: 8px;
+  border: 1.5px solid rgba(255, 255, 255, 0.6);
+  border-radius: 12px;
   text-decoration: none;
   color: var(--text);
   font-family: var(--font-b);
   font-size: 13px;
   font-weight: 600;
   box-sizing: border-box;
-  background: var(--bg2);
+  background: rgba(255, 255, 255, 0.5);
   cursor: pointer;
+  transition: background 0.13s;
+}
+.google-btn:hover {
+  background: rgba(255, 255, 255, 0.75);
+}
+html[data-theme='dark'] .google-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+html[data-theme='dark'] .google-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .helpdesk-link-wrap {
@@ -234,15 +502,79 @@ html[data-theme='dark'] .login-box {
   justify-content: center;
   color: var(--muted);
 }
+.modal-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.modal-icon-badge {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--accent) 0%, #1d7a4e 100%);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 3px 8px rgba(26, 110, 60, 0.28);
+}
 .modal-title {
   font-family: var(--font-d);
-  font-size: 19px;
-  margin-bottom: 4px;
+  font-size: 18px;
+  line-height: 1.25;
 }
 .modal-subtitle {
   font-size: 12px;
   color: var(--muted);
-  margin-bottom: 14px;
+  line-height: 1.55;
+  margin: 12px 0 16px;
+  padding: 10px 12px;
+  background: var(--bg3);
+  border-radius: 10px;
+  border-left: 3px solid var(--accent);
+}
+.modal-success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 10px 4px 6px;
+  gap: 10px;
+}
+.modal-success-icon {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: #dcfce7;
+  color: #15803d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+html[data-theme='dark'] .modal-success-icon {
+  background: rgba(21, 128, 61, 0.18);
+}
+.modal-success-title {
+  font-family: var(--font-d);
+  font-size: 16px;
+  color: var(--text);
+}
+.modal-success .modal-subtitle {
+  margin: 0;
+  border-left-color: #15803d;
+}
+.modal-close-plain {
+  margin-top: 6px;
+  padding: 10px 22px;
+  border-radius: 10px;
+  border: 1px solid var(--border2);
+  background: var(--bg3);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 12.5px;
+  cursor: pointer;
 }
 
 .loading-overlay {
@@ -279,8 +611,20 @@ html[data-theme='dark'] .loading-overlay {
   color: var(--muted);
 }
 
-@media (max-width: 768px) {
-  .login-box {
-    padding: 22px 18px;
+@media (max-width: 860px) {
+  .login-visual {
+    display: none;
+  }
+  .login-card {
+    max-height: 94vh;
+  }
+}
+
+@media (max-width: 480px) {
+  .login-panel {
+    padding: 26px 18px;
+  }
+  .login-card {
+    border-radius: 16px;
   }
 }

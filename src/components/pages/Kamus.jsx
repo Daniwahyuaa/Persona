@@ -25,9 +25,15 @@ function groupBy(items, key) {
 
 export default function Kamus() {
   const { user } = useAuth()
-  const restricted = String(user?.role || '').toLowerCase() === 'user'
+  const roleLower = String(user?.role || '').toLowerCase()
+  const restricted = roleLower === 'user'
+  // "Indikator Perilaku per Level" hanya untuk admin & superadmin (user & executive tidak melihatnya).
+  const canSeeIndikator = roleLower === 'admin' || roleLower === 'superadmin'
+  // "Skala Penilaian" (di tab 10 Kompetensi BUMN > Kualifikasi Profesional) disembunyikan
+  // untuk role 'user'; tetap tampil untuk superadmin & admin.
+  const canSeeSkalaPenilaian = roleLower === 'admin' || roleLower === 'superadmin'
 
-  const [topTab, setTopTab] = useState('ptpn') // 'ptpn' | 'bumn'
+  const [topTab, setTopTab] = useState('bumn') // 'ptpn' | 'bumn'
   const [innerTab, setInnerTab] = useState('soft') // 'soft' | 'hard'
   const [searchOpen, setSearchOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -184,6 +190,16 @@ export default function Kamus() {
   return (
     <div>
       <div className="topbar" style={{ padding: '0 28px', gap: 4 }}>
+        
+       
+        <div className={`top-tab${topTab === 'bumn' ? ' active' : ''}`} onClick={() => setTopTab('bumn')}>
+          <Icon name="book" size={14} strokeWidth={2.2} />
+          10 Kompetensi BUMN
+        </div>
+         <div className={`top-tab${topTab === 'ptpn' ? ' active' : ''}`} onClick={() => setTopTab('ptpn')}>
+          <Icon name="target" size={14} strokeWidth={2.2} />
+          Kompetensi PTPN Group
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', marginRight: 6 }}>
           <button
             onClick={() => {
@@ -220,12 +236,6 @@ export default function Kamus() {
             }}
           />
         </div>
-        <div className={`top-tab${topTab === 'ptpn' ? ' active' : ''}`} onClick={() => setTopTab('ptpn')}>
-          Kompetensi PTPN Group
-        </div>
-        <div className={`top-tab${topTab === 'bumn' ? ' active' : ''}`} onClick={() => setTopTab('bumn')}>
-          10 Kompetensi BUMN
-        </div>
       </div>
 
       <div className="content">
@@ -254,18 +264,30 @@ export default function Kamus() {
           </div>
         ) : topTab === 'ptpn' ? (
           <div>
+            <div className="card" style={{ marginBottom: 14 }}>
+              <p style={{ fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.6 }}>
+               Kamus Kompetensi PTPN Group digunakan sebagai acuan dalam pelaksanaan asesmen kompetensi bagi pemangku jabatan BOD-2 
+               atau BOD-3 di lingkungan PTPN Group. 
+               Kamus ini disusun untuk memastikan pengukuran kompetensi dilakukan secara relevan dengan karakteristik bisnis, 
+               kebutuhan organisasi, serta tuntutan pekerjaan pada level jabatan BOD-3.
+              </p>
+            </div>
             {!restricted && (
               <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
                 <button
                   className={`inner-tab-btn${innerTab === 'soft' ? ' active' : ''}`}
                   onClick={() => setInnerTab('soft')}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                 >
+                  <Icon name="checkCircle" size={13} strokeWidth={2.2} />
                   Soft Competency
                 </button>
                 <button
                   className={`inner-tab-btn${innerTab === 'hard' ? ' active' : ''}`}
                   onClick={() => setInnerTab('hard')}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                 >
+                  <Icon name="database" size={13} strokeWidth={2.2} />
                   Hard Competency
                 </button>
               </div>
@@ -303,7 +325,7 @@ export default function Kamus() {
                                 {itemOpen && (
                                   <div id={`kamus-soft-body-${uid}`} style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border2)' }}>
                                     <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 10 }}>{item.definisi}</p>
-                                    {!restricted && (
+                                    {canSeeIndikator && (
                                       <>
                                         <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--dim)', marginBottom: 6 }}>
                                           Indikator Perilaku per Level
@@ -441,6 +463,13 @@ export default function Kamus() {
           </div>
         ) : (
           <div>
+            <div className="card" style={{ marginBottom: 14 }}>
+              <p style={{ fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.6 }}>
+                10 Kompetensi BUMN digunakan sebagai acuan dalam pelaksanaan asesmen kompetensi bagi pemangku jabatan BOD-1 atau BOD-2. 
+                Kerangka kompetensi ini mengacu pada standar kompetensi yang ditetapkan dalam ekosistem BUMN 
+                dan digunakan untuk mengukur kapabilitas kepemimpinan serta perilaku strategis yang dibutuhkan oleh pejabat di lingkup Perusahaan.
+              </p>
+            </div>
             <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--accent)', marginBottom: 8 }}>
               A. Kompetensi &amp; Perilaku Kunci
             </div>
@@ -474,21 +503,25 @@ export default function Kamus() {
                               </div>
                               {itemOpen && (
                                 <div id={`kamus-bumn-body-${uid}`} style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border2)' }}>
-                                  <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 10 }}>{item.definisi}</p>
-                                  <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--dim)', marginBottom: 6 }}>
-                                    Perilaku Kunci (Key Behavior)
-                                  </div>
-                                  {item.perilaku.map((p, i) => (
-                                    <div key={i} style={{ display: 'flex', gap: 8, padding: '5px 0', borderBottom: '1px dashed var(--border2)' }}>
-                                      <span style={{
-                                        flexShrink: 0, width: 20, height: 20, borderRadius: '50%', background: 'var(--bg3)',
-                                        color: 'var(--accent)', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                      }}>
-                                        {i + 1}
-                                      </span>
-                                      <span style={{ fontSize: 11.5, color: 'var(--text)', lineHeight: 1.5 }}>{p}</span>
-                                    </div>
-                                  ))}
+                                  <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6, marginBottom: roleLower === 'user' ? 0 : 10 }}>{item.definisi}</p>
+                                  {roleLower !== 'user' && (
+                                    <>
+                                      <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--dim)', marginBottom: 6 }}>
+                                        Perilaku Kunci (Key Behavior)
+                                      </div>
+                                      {item.perilaku.map((p, i) => (
+                                        <div key={i} style={{ display: 'flex', gap: 8, padding: '5px 0', borderBottom: '1px dashed var(--border2)' }}>
+                                          <span style={{
+                                            flexShrink: 0, width: 20, height: 20, borderRadius: '50%', background: 'var(--bg3)',
+                                            color: 'var(--accent)', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                          }}>
+                                            {i + 1}
+                                          </span>
+                                          <span style={{ fontSize: 11.5, color: 'var(--text)', lineHeight: 1.5 }}>{p}</span>
+                                        </div>
+                                      ))}
+                                    </>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -528,20 +561,24 @@ export default function Kamus() {
                             <li key={i} style={{ fontSize: 11.5, color: 'var(--text)', lineHeight: 1.6, marginBottom: 2 }}>{m}</li>
                           ))}
                         </ul>
-                        <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--dim)', marginBottom: 6 }}>
-                          Skala Penilaian
-                        </div>
-                        {item.skala.map((s) => (
-                          <div key={s.level} style={{ display: 'flex', gap: 8, padding: '5px 0', borderBottom: '1px dashed var(--border2)' }}>
-                            <span style={{
-                              flexShrink: 0, width: 20, height: 20, borderRadius: '50%', background: 'var(--bg3)',
-                              color: 'var(--accent)', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            }}>
-                              {s.level}
-                            </span>
-                            <span style={{ fontSize: 11.5, color: 'var(--text)', lineHeight: 1.5 }}>{s.penjelasan}</span>
-                          </div>
-                        ))}
+                        {canSeeSkalaPenilaian && (
+                          <>
+                            <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--dim)', marginBottom: 6 }}>
+                              Skala Penilaian
+                            </div>
+                            {item.skala.map((s) => (
+                              <div key={s.level} style={{ display: 'flex', gap: 8, padding: '5px 0', borderBottom: '1px dashed var(--border2)' }}>
+                                <span style={{
+                                  flexShrink: 0, width: 20, height: 20, borderRadius: '50%', background: 'var(--bg3)',
+                                  color: 'var(--accent)', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                }}>
+                                  {s.level}
+                                </span>
+                                <span style={{ fontSize: 11.5, color: 'var(--text)', lineHeight: 1.5 }}>{s.penjelasan}</span>
+                              </div>
+                            ))}
+                          </>
+                        )}
                       </div>
                     )}
                   </div>

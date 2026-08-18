@@ -149,6 +149,19 @@ html[data-theme='dark'] body {
      collapse yang mengambang di tepi kanan sidebar. */
   margin: 0 0 0 auto;
 }
+.logo-greeting {
+  margin-top: 10px;
+  text-align: left;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.logo-greeting strong {
+  color: var(--text);
+  font-weight: 700;
+}
 
 .nav {
   padding: 10px 0;
@@ -193,6 +206,9 @@ html[data-theme='dark'] body {
 .three-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px}
 @media(max-width:960px){.three-col{grid-template-columns:1fr}}
 
+.nb-layout{display:grid;grid-template-columns:320px 1fr;gap:16px;align-items:start}
+@media(max-width:900px){.nb-layout{grid-template-columns:1fr}}
+
 .search-input{flex:1;min-width:180px;max-width:260px;padding:7px 11px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-family:var(--font-b);font-size:13px;outline:none;transition:all .13s}
 .search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(26,110,60,.1)}
 .search-input::placeholder{color:var(--dim)}
@@ -208,14 +224,16 @@ html[data-theme='dark'] body {
 .badge-st{background:#ede9fe;color:#6d28d9}
 .badge-null{background:#f3f4f6;color:#9ca3af}
 
-.tp-outer-title{font-size:12px;color:var(--muted);font-weight:700;letter-spacing:.7px;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:7px}
+.tp-outer-title{font-size:12px;color:var(--muted);font-weight:700;letter-spacing:.7px;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:8px}
 .card-title-gold{background:linear-gradient(160deg,#e6b800 0%,#f5c500 55%,#ffd633 100%)!important;color:#1a1a00!important;text-shadow:none!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.45), inset 0 -3px 6px rgba(0,0,0,.12)!important}
 
 .tp-result-item{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border:1px solid var(--border2);border-radius:8px;cursor:pointer;font-size:12.5px}
 .tp-result-item:hover{border-color:var(--accent);background:var(--bg2)}
-.tp-identity-box{background:var(--bg3);border-radius:8px;padding:8px 12px}
-.tp-identity-label{font-size:9.5px;color:var(--dim);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px}
-.tp-identity-value{font-size:12.5px;color:var(--text);font-weight:600}
+.tp-identity-box{background:var(--bg3);border:1px solid transparent;border-radius:9px;padding:10px 14px;transition:border-color .13s, transform .13s, box-shadow .13s}
+.tp-identity-box:hover{border-color:var(--accent);transform:translateY(-1px);box-shadow:0 4px 10px rgba(0,0,0,.06)}
+.tp-identity-label{font-size:9.5px;color:var(--dim);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tp-identity-value{font-size:13px;color:var(--text);font-weight:700;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.1px}
+
 
 .nav-badge {
   background: var(--danger);
@@ -349,14 +367,14 @@ html[data-theme='dark'] body {
   position: fixed;
   top: 14px;
   right: 22px;
-  height: 56px;
+  height: 68px;
   width: auto;
   z-index: 5200;
   pointer-events: none;
 }
 @media (max-width: 768px) {
   .sgn-fixed-logo {
-    height: 38px !important;
+    height: 44px !important;
     top: 8px !important;
     right: 12px !important;
   }
@@ -369,6 +387,26 @@ html[data-theme='dark'] body {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+/* Logo SGN di pojok kanan atas top bar, tampil di semua halaman setelah login
+   (bukan cuma layar login). Ukurannya lebih kecil dari versi login supaya pas
+   di dalam top bar, dan diletakkan sedikit lebih ke kiri/bawah dari tepi. */
+.app-sgn-logo {
+  position: fixed;
+  top: 12px;
+  right: 20px;
+  height: 34px;
+  width: auto;
+  z-index: 350;
+  pointer-events: none;
+  opacity: 0.94;
+}
+@media (max-width: 768px) {
+  .app-sgn-logo {
+    height: 26px;
+    top: 9px;
+    right: 12px;
+  }
 }
 .app-welcome-avatar {
   width: 26px;
@@ -552,13 +590,19 @@ html[data-theme='dark'] body {
 }
 
 .card {
-  background: var(--card);
-  border: 1px solid var(--border);
+  background: var(--card-glass-bg);
+  border: 1px solid var(--card-glass-border);
   border-radius: var(--radius);
   padding: 15px 17px;
   margin-bottom: 14px;
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.25);
   overflow: hidden;
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  transition: box-shadow 0.18s ease, transform 0.18s ease;
+}
+.card:hover {
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.09), var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 .card-title {
   font-size: 11px;
@@ -855,15 +899,151 @@ html, body {
 .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
 .count-badge { font-size: 11.5px; color: var(--dim); margin-left: auto; }
 
-/* ══ TABLE ══ */
-.tbl-wrap { overflow-x: auto; overflow-y: auto; border-radius: var(--radius-sm); border: 1px solid var(--border); }
-.tbl-wrap thead th { position: sticky; top: 0; z-index: 4; background: var(--bg3); }
-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-thead tr { background: var(--bg3); }
+/* ══ TABLE — sebelumnya pakai efek "kaca" berwarna (blob bokeh), sekarang
+   disederhanakan jadi putih polos (var(--card)) di semua halaman. ══ */
+.tbl-wrap {
+  position: relative;
+  overflow-x: auto;
+  overflow-y: auto;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border2);
+  background-color: var(--card);
+  box-shadow: var(--shadow);
+}
+.tbl-wrap thead th {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: var(--bg3);
+}
+
+/* ══ Tab "Formula" di Talent Point System: header (judul+deskripsi+tombol
+   Simpan) DAN baris <thead> tabel sama-sama di-freeze saat halaman di-scroll,
+   menempel tepat di bawah .topbar lalu di bawah header itu sendiri. Beda dari
+   .tbl-wrap biasa: overflow harus 'visible' di kedua axis (bukan 'auto')
+   supaya elemen di dalamnya sticky relatif ke scroll halaman (.main), bukan
+   ke .tbl-wrap itu sendiri (yang tidak pernah benar-benar scroll karena
+   tingginya mengikuti konten). Catatan: overflow-x & overflow-y HARUS sama-
+   sama 'visible' — browser otomatis mengubah salah satu jadi 'auto' kalau
+   yang lain bukan 'visible' (lihat CSS Overflow spec), jadi tidak bisa cuma
+   override satu axis saja. Tabelnya sendiri cuma 5 kolom ringkas (kolom
+   Deskripsi sudah dibatasi maxWidth), jadi aman tanpa scroll horizontal
+   sendiri. Tinggi topbar & header diukur dinamis lewat JS (lihat
+   TalentPointSystem.jsx) dan dioper sebagai CSS var --tps-topbar-h /
+   --tps-intro-h, supaya tidak hardcode angka px yang gampang geser. ══ */
+.formula-tbl-wrap {
+  overflow: visible;
+}
+.formula-tbl-wrap thead th {
+  top: calc(var(--tps-topbar-h, 49px) + var(--tps-intro-h, 110px));
+  z-index: 15;
+  box-shadow: 0 1px 0 var(--border2);
+}
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; background: transparent; }
+thead tr { background: transparent; }
 th { padding: 9px 12px; text-align: left; font-size: 9.5px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border2); white-space: nowrap; }
-td { padding: 8px 12px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; }
+td { padding: 8px 12px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; background: transparent; }
 tr:last-child td { border-bottom: none; }
 tbody tr:hover td { background: var(--bg3); }
+
+
+/* ══ EMPLOYEE HISTORY TABLE (Edit Profile > Tambah Employee History) ══ */
+.eh-table td, .eh-table th { vertical-align: top; }
+.eh-table select,
+.eh-table input[type='text'] {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  border: 1.5px solid var(--border2);
+  border-radius: 8px;
+  background: var(--bg2);
+  color: var(--text);
+  font-family: var(--font-b);
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.eh-table select {
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 26px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%239ca3af' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+}
+.eh-table select:focus,
+.eh-table input[type='text']:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(26, 110, 60, 0.12);
+}
+.eh-table tr.eh-add-row td { background: var(--bg3); }
+.eh-table tr.eh-add-row:hover td { background: var(--bg3); }
+
+/* Badge Reguler/Top pada baris yang sudah terisi (tersimpan/antrean) */
+.eh-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 10.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.eh-pill-reg { background: var(--bg3); color: var(--muted); }
+.eh-pill-top { background: #fef3c7; color: #92400e; }
+
+/* Toggle Reguler/Top pada baris tambah — 1 grup tombol, exclusive */
+.eh-kategori-toggle {
+  display: inline-flex;
+  border: 1.5px solid var(--border2);
+  border-radius: 20px;
+  overflow: hidden;
+  background: var(--bg2);
+}
+.eh-kategori-toggle button {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-b);
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 6px 11px;
+  cursor: pointer;
+  transition: all 0.13s;
+  white-space: nowrap;
+}
+.eh-kategori-toggle button.active {
+  background: var(--accent);
+  color: #fff;
+}
+.eh-kategori-toggle button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+.eh-kategori-toggle button:not(:disabled):not(.active):hover {
+  color: var(--text);
+}
+
+/* Tombol aksi (hapus / tambah) icon-only di tabel */
+.eh-icon-btn, .eh-add-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  border: 1px solid var(--border2);
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.13s;
+}
+.eh-icon-btn { color: var(--danger); }
+.eh-icon-btn:hover:not(:disabled) { background: rgba(192, 57, 43, 0.08); }
+.eh-icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.eh-add-btn { color: var(--accent); border-color: var(--accent); }
+.eh-add-btn:hover:not(:disabled) { background: rgba(26, 110, 60, 0.08); }
+.eh-add-btn:disabled { opacity: 0.4; cursor: not-allowed; border-color: var(--border2); color: var(--muted); }
 
 /* ══ SCORE / SIMPLE BARS ══ */
 .score-bar { display: flex; align-items: center; gap: 7px; min-width: 110px; }
@@ -894,6 +1074,23 @@ tbody tr:hover td { background: var(--bg3); }
 /* ══ REFRESH BUTTON ══ */
 .btn-refresh { display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; border-radius: 8px; border: 1px solid var(--border2); background: var(--bg2); color: var(--muted); font-family: var(--font-b); font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.13s; }
 .btn-refresh:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Tombol "Kembali" bentuk pill dengan lingkaran ikon di dalamnya — dipakai
+   di atas form (mis. Coaching Session) supaya jalan kembali selalu terlihat
+   jelas & tidak tersembunyi di topbar saat layar sempit. */
+.back-pill-btn {
+  display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px 8px 8px;
+  border-radius: 99px; border: 1.5px solid var(--border2); background: var(--bg2); color: var(--text);
+  font-family: var(--font-b); font-size: 12.5px; font-weight: 700; cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.back-pill-btn:hover { border-color: var(--accent); background: rgba(26,110,60,.06); box-shadow: 0 1px 6px rgba(26,110,60,.12); }
+.back-pill-btn .back-pill-icon {
+  width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff;
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  transition: transform 0.15s;
+}
+.back-pill-btn:hover .back-pill-icon { transform: translateX(-2px); }
 .btn-refresh.loading svg { animation: spin 0.8s linear infinite; }
 .btn-refresh svg { width: 13px; height: 13px; flex-shrink: 0; }
 

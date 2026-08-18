@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, Fragment } from 'react'
+import { useEffect, useMemo, useRef, useState, Fragment } from 'react'
 import Icon from '../Icon.jsx'
 import { supabase } from '../../lib/supabaseClient.js'
 import { getTalentSourceData, toProperCase, properPosisi, fStr } from '../../lib/talentSourceApi.js'
@@ -9,6 +9,7 @@ import {
   getScoreComponents,
 } from '../../lib/talentPointSystemApi.js'
 import { avatarColor, initials } from '../../lib/avatar.js'
+import { useTalentPointSystem } from '../../context/TalentPointSystemContext.jsx'
 
 const RANK_EMOJI = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣']
 const MEDAL_COLOR = ['#d97706', '#6b7280', '#92400e', '#1a4f7a', '#7c3aed']
@@ -18,31 +19,229 @@ function scoreColor(n) {
 }
 
 // ════════════════════════════════════════
-// FORMULA TAB (sudah ada sebelumnya, dipertahankan)
+// FORMULA TAB — bobot & nilai dasar tiap tier bisa diedit lalu disimpan
+// ke tabel "formula" di Supabase (klik tombol Simpan).
 // ════════════════════════════════════════
 function FormulaTab() {
   const [rows, setRows] = useState(null)
+  // edits: { [id]: { bobot?: string, poin_dasar?: string } } — hanya menyimpan
+  // field yang sedang diedit oleh user (nilai string dari input, belum di-parse).
+  const [edits, setEdits] = useState({})
+  const [saving, setSaving] = useState(false)
+  const [saveMsg, setSaveMsg] = useState(null) // { ok: bool, text: string }
+
+  // Ukur tinggi blok header (judul + deskripsi + tombol Simpan) supaya baris
+  // <thead> tabel di bawahnya tahu persis di mana harus berhenti saat freeze,
+  // sehingga keduanya (header & thead) menempel rapi bertumpuk, tidak tumpang tindih.
+  const headerRef = useRef(null)
+  const [headerH, setHeaderH] = useState(110)
 
   useEffect(() => {
+    const el = headerRef.current
+    if (!el) return
+    const update = () => setHeaderH(el.offsetHeight)
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    window.addEventListener('resize', update)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', update)
+    }
+  }, [])
+
+  function loadFormula() {
+    setRows(null)
+    setEdits({})
+    setSaveMsg(null)
     supabase
       .from('formula')
       .select('*')
       .order('urutan', { ascending: true })
-      .then(({ data }) => setRows(data || []))
-  }, [])
+      .then(({ data, error }) => {
+        if (error) { setRows([]); setSaveMsg({ ok: false, text: error.message }); return }
+        setRows(data || [])
+      })
+  }
+
+  useEffect(() => { loadFormula() }, [])
 
   const uniqueKomponen = [...new Map((rows || []).map((r) => [r.komponen, r])).values()]
-  const total = uniqueKomponen.reduce((s, r) => s + (Number(r.bobot) || 0), 0)
+
+  // Nilai bobot efektif utk 1 komponen: ambil dari edit (jika ada) di baris manapun
+  // pada grup itu, kalau tidak ada pakai nilai dari DB (head.bobot).
+  function effBobot(head) {
+    const rowsInGroup = (rows || []).filter((r) => r.komponen === head.komponen)
+    const editedRow = rowsInGroup.find((r) => edits[r.id]?.bobot !== undefined)
+    if (editedRow) return edits[editedRow.id].bobot
+    return head.bobot ?? ''
+  }
+  function effPoin(row) {
+    return edits[row.id]?.poin_dasar !== undefined ? edits[row.id].poin_dasar : (row.poin_dasar ?? '')
+  }
+
+  const total = uniqueKomponen.reduce((s, r) => s + (parseFloat(effBobot(r)) || 0), 0)
+  const roundedTotal = Math.round(total * 100) / 100
+  const isValidTotal = roundedTotal === 100
+  const hasChanges = Object.keys(edits).length > 0
+  const canSave = hasChanges && isValidTotal
+
+  function handleBobotChange(head, value) {
+    // Bobot disimpan per-baris di DB (redundan utk tiap tier dalam 1 komponen),
+    // jadi saat diedit, terapkan ke SEMUA baris pada komponen yang sama supaya
+    // datanya tetap konsisten ketika disimpan.
+    const rowsInGroup = (rows || []).filter((r) => r.komponen === head.komponen)
+    setEdits((prev) => {
+      const next = { ...prev }
+      rowsInGroup.forEach((r) => { next[r.id] = { ...next[r.id], bobot: value } })
+      return next
+    })
+    setSaveMsg(null)
+  }
+  function handlePoinChange(row, value) {
+    setEdits((prev) => ({ ...prev, [row.id]: { ...prev[row.id], poin_dasar: value } }))
+    setSaveMsg(null)
+  }
+
+  async function handleSave() {
+    const ids = Object.keys(edits)
+    if (!ids.length) return
+    if (!isValidTotal) {
+      setSaveMsg({ ok: false, text: `Total bobot masih ${roundedTotal}%. Perbaiki dulu sampai tepat 100% sebelum bisa disimpan.` })
+      return
+    }
+    setSaving(true)
+    setSaveMsg(null)
+    try {
+      const results = await Promise.all(
+        ids.map((id) => {
+          const patch = {}
+          if (edits[id].bobot !== undefined) {
+            const n = parseFloat(edits[id].bobot)
+            patch.bobot = isNaN(n) ? null : n
+          }
+          if (edits[id].poin_dasar !== undefined) {
+            const n = parseFloat(edits[id].poin_dasar)
+            patch.poin_dasar = isNaN(n) ? null : n
+          }
+          return supabase.from('formula').update(patch).eq('id', id)
+        })
+      )
+      const firstError = results.find((r) => r.error)
+      if (firstError) throw firstError.error
+      setSaveMsg({ ok: true, text: 'Formula berhasil disimpan.' })
+      setEdits({})
+      loadFormula()
+    } catch (err) {
+      console.error('[FormulaTab] Gagal menyimpan:', err)
+      setSaveMsg({ ok: false, text: err?.message || 'Gagal menyimpan formula. Coba lagi.' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function handleCancel() {
+    setEdits({})
+    setSaveMsg(null)
+  }
+
+  const numInputStyle = {
+    width: 64,
+    padding: '4px 6px',
+    border: '1.5px solid var(--border2)',
+    borderRadius: 6,
+    fontSize: 12,
+    fontWeight: 700,
+    textAlign: 'center',
+    background: 'var(--bg2)',
+    color: 'var(--text)',
+  }
 
   return (
-    <div className="page active" style={{ maxWidth: 900 }}>
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)', marginBottom: 4 }}>⚖️ Formula Penilaian</div>
-        <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-          Bobot (%) tiap komponen penilaian. Total harus = 100%. Dipakai langsung sebagai formula skoring di tab{' '}
-          <strong>Talent Point System</strong>. Perubahan disimpan ke tabel <strong>formula</strong> di Supabase.
+    <div className="page active" style={{ maxWidth: 900, '--tps-intro-h': `${headerH}px` }}>
+      <div
+        ref={headerRef}
+        style={{
+          position: 'sticky',
+          top: 'var(--tps-topbar-h, 49px)',
+          zIndex: 20,
+          background: 'var(--bg)',
+          paddingTop: 4,
+          paddingBottom: 14,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 16, fontWeight: 800, color: 'var(--text)', marginBottom: 4 }}>
+              <span
+                style={{
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  width: 26, height: 26, borderRadius: 7, background: '#fef3c7', color: '#92400e', flexShrink: 0,
+                }}
+              >
+                <Icon name="scale" size={14} strokeWidth={2.3} />
+              </span>
+              Formula Penilaian
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+              Bobot (%) tiap komponen penilaian. Total harus = 100%. Dipakai langsung sebagai formula skoring di tab{' '}
+              <strong>Talent Point System</strong>. Klik nilai untuk mengubah, lalu <strong>Simpan</strong> untuk menulis ke tabel{' '}
+              <strong>formula</strong> di Supabase.
+            </div>
+          </div>
+          {rows && rows.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+              {hasChanges && (
+                <button
+                  onClick={handleCancel}
+                  disabled={saving}
+                  style={{ padding: '9px 16px', background: 'transparent', border: '1.5px solid var(--border2)', color: 'var(--muted)', borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Batal
+                </button>
+              )}
+              <button
+                onClick={handleSave}
+                disabled={!canSave || saving}
+                title={hasChanges && !isValidTotal ? `Total bobot harus 100% (saat ini ${roundedTotal}%)` : undefined}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 18px',
+                  background: canSave ? 'var(--accent)' : 'var(--bg3)', color: canSave ? '#fff' : 'var(--dim)',
+                  border: 'none', borderRadius: 8, fontSize: 12.5, fontWeight: 700,
+                  cursor: canSave && !saving ? 'pointer' : 'not-allowed', opacity: saving ? 0.7 : 1,
+                }}
+              >
+                <Icon name={hasChanges && !isValidTotal ? 'lock' : 'save'} size={13} />
+                {saving ? 'Menyimpan…' : 'Simpan Perubahan'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
+
+      {hasChanges && !isValidTotal && (
+        <div
+          style={{
+            padding: '10px 14px', marginBottom: 16, borderRadius: 9, fontSize: 12.5,
+            background: 'rgba(217,119,6,.08)', border: '1px solid var(--accent3)', color: 'var(--accent3)',
+          }}
+        >
+          🔒 Tombol Simpan dikunci — total bobot saat ini <strong>{roundedTotal}%</strong>, harus tepat <strong>100%</strong> dulu sebelum perubahan bisa disimpan.
+        </div>
+      )}
+
+      {saveMsg && (
+        <div
+          style={{
+            padding: '10px 14px', marginBottom: 16, borderRadius: 9, fontSize: 12.5,
+            background: saveMsg.ok ? 'rgba(26,110,60,.08)' : 'rgba(192,57,43,.07)',
+            border: `1px solid ${saveMsg.ok ? 'var(--accent)' : 'var(--danger)'}`,
+            color: saveMsg.ok ? 'var(--accent)' : 'var(--danger)',
+          }}
+        >
+          {saveMsg.ok ? '✅ ' : '⚠️ '}{saveMsg.text}
+        </div>
+      )}
 
       {rows === null ? (
         <div style={{ color: 'var(--muted)', fontSize: 12, padding: '16px 0' }}>Memuat formula…</div>
@@ -54,7 +253,7 @@ function FormulaTab() {
         </div>
       ) : (
         <>
-          <div className="tbl-wrap" style={{ marginBottom: 16 }}>
+          <div className="tbl-wrap formula-tbl-wrap" style={{ marginBottom: 16 }}>
             <table>
               <thead>
                 <tr>
@@ -66,36 +265,66 @@ function FormulaTab() {
                 </tr>
               </thead>
               <tbody>
-                {uniqueKomponen.map((head) => (
-                  <Fragment key={head.komponen}>
-                    <tr style={{ borderTop: '2px solid var(--border2)', background: 'var(--bg2)' }}>
-                      <td style={{ fontWeight: 800, whiteSpace: 'nowrap' }}>{head.label || head.komponen}</td>
-                      <td style={{ fontSize: 11.5, color: 'var(--muted)', maxWidth: 280 }}>{head.deskripsi || ''}</td>
-                      <td style={{ textAlign: 'center', fontWeight: 800, color: 'var(--accent)' }}>{head.bobot}%</td>
-                      <td style={{ textAlign: 'center', fontSize: 11, color: 'var(--muted)' }}>—</td>
-                      <td style={{ fontSize: 11, color: 'var(--muted)' }}>Maks = bobot%</td>
-                    </tr>
-                    {rows.filter((r) => r.komponen === head.komponen).map((t, ti) => (
-                      <tr key={t.id ?? `${head.komponen}-${ti}`} style={{ background: 'var(--bg3)' }}>
-                        <td style={{ paddingLeft: 36, whiteSpace: 'nowrap' }}>
-                          <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: 'var(--accent)', opacity: 0.4, marginRight: 7 }} />
-                          {t.tier_nilai}
+                {uniqueKomponen.map((head) => {
+                  const bobotVal = effBobot(head)
+                  return (
+                    <Fragment key={head.komponen}>
+                      <tr style={{ borderTop: '2px solid var(--border2)', background: 'var(--bg2)' }}>
+                        <td style={{ fontWeight: 800, whiteSpace: 'nowrap' }}>{head.label || head.komponen}</td>
+                        <td style={{ fontSize: 11.5, color: 'var(--muted)', maxWidth: 280 }}>{head.deskripsi || ''}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={bobotVal}
+                              onChange={(e) => handleBobotChange(head, e.target.value)}
+                              style={{ ...numInputStyle, color: 'var(--accent)', fontWeight: 800 }}
+                            />
+                            <span style={{ fontSize: 11, color: 'var(--muted)' }}>%</span>
+                          </div>
                         </td>
-                        <td style={{ fontSize: 11, color: 'var(--dim)' }}>{t.keterangan_tier || '—'}</td>
-                        <td style={{ textAlign: 'center', color: 'var(--dim)' }}>—</td>
-                        <td style={{ textAlign: 'center', fontWeight: 700 }}>{t.poin_dasar}<span style={{ fontSize: 10, color: 'var(--dim)' }}>/100</span></td>
-                        <td style={{ fontSize: 11, color: 'var(--dim)' }}>
-                          {t.poin_dasar} × {head.bobot}% / 100 = {parseFloat(((Number(t.poin_dasar) || 0) * (Number(head.bobot) || 0) / 100).toFixed(3))} poin
-                        </td>
+                        <td style={{ textAlign: 'center', fontSize: 11, color: 'var(--muted)' }}>—</td>
+                        <td style={{ fontSize: 11, color: 'var(--muted)' }}>Maks = bobot%</td>
                       </tr>
-                    ))}
-                  </Fragment>
-                ))}
+                      {rows.filter((r) => r.komponen === head.komponen).map((t, ti) => {
+                        const poinVal = effPoin(t)
+                        const poinNum = Number(poinVal) || 0
+                        const bobotNum = parseFloat(bobotVal) || 0
+                        return (
+                          <tr key={t.id ?? `${head.komponen}-${ti}`} style={{ background: 'var(--bg3)' }}>
+                            <td style={{ paddingLeft: 36, whiteSpace: 'nowrap' }}>
+                              <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: 'var(--accent)', opacity: 0.4, marginRight: 7 }} />
+                              {t.tier_nilai}
+                            </td>
+                            <td style={{ fontSize: 11, color: 'var(--dim)' }}>{t.keterangan_tier || '—'}</td>
+                            <td style={{ textAlign: 'center', color: 'var(--dim)' }}>—</td>
+                            <td style={{ textAlign: 'center' }}>
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                                <input
+                                  type="number"
+                                  step="1"
+                                  value={poinVal}
+                                  onChange={(e) => handlePoinChange(t, e.target.value)}
+                                  style={numInputStyle}
+                                />
+                                <span style={{ fontSize: 10, color: 'var(--dim)' }}>/100</span>
+                              </div>
+                            </td>
+                            <td style={{ fontSize: 11, color: 'var(--dim)' }}>
+                              {poinNum} × {bobotNum}% / 100 = {parseFloat(((poinNum * bobotNum) / 100).toFixed(3))} poin
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </Fragment>
+                  )
+                })}
               </tbody>
             </table>
           </div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: total === 100 ? 'var(--accent)' : 'var(--danger)' }}>
-            Total bobot: {total}% {total === 100 ? '✅' : '⚠️ Harus = 100%'}
+          <div style={{ fontSize: 12, fontWeight: 700, color: roundedTotal === 100 ? 'var(--accent)' : 'var(--danger)' }}>
+            Total bobot: {roundedTotal}% {roundedTotal === 100 ? '✅' : '⚠️ Harus = 100%'}
           </div>
         </>
       )}
@@ -235,22 +464,14 @@ function CompareTable({ profiles }) {
                   let disp
                   if (v == null || v === '—' || v === '') disp = <span style={{ color: 'var(--dim)' }}>—</span>
                   else if (f.k === 'cli' || f.k === 'kpi') {
-                    const col = scoreColor(num)
-                    disp = (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, justifyContent: 'center' }}>
-                        <div style={{ width: 48, height: 6, background: 'var(--border2)', borderRadius: 3, overflow: 'hidden' }}>
-                          <div style={{ width: `${Math.min(100, num)}%`, height: '100%', background: col, borderRadius: 3 }} />
-                        </div>
-                        <strong style={{ color: col }}>{f.k === 'cli' ? num.toFixed(2) : num}</strong>
-                      </div>
-                    )
-                  } else if (f.num && num != null) disp = <strong>{num}</strong>
+                   disp = <strong>{f.k === 'cli' ? num.toFixed(2) : num}</strong>
+                  } 
+                  else if (f.num && num != null) disp = <strong>{num}</strong>
                   else disp = <span style={{ fontSize: 12 }}>{v}</span>
                   return (
-                    <td key={i} style={{ textAlign: 'center', background: isBest ? 'rgba(26,110,60,.06)' : undefined }}>
-                      {isBest && <span style={{ fontSize: 10, marginRight: 3 }}>🏆</span>}
-                      {disp}
-                    </td>
+                    <td key={i} style={{ textAlign: 'center' }}>
+                   {disp}
+                  </td>
                   )
                 })}
               </tr>
@@ -438,10 +659,11 @@ function AnalysisResult({ ranked, formulaWeights }) {
 // ════════════════════════════════════════
 function TalentPointSystemTab() {
   const [state, setState] = useState({ loading: true, error: null, rows: [], formulaWeights: [] })
-  const [slots, setSlots] = useState(['', '', null, null, null])
+  // slots/ranked/analyzeError disimpan di context global (bukan useState lokal)
+  // supaya hasil pencarian 5 kandidat TIDAK hilang ketika user pindah ke menu
+  // lain lalu balik lagi — baru hilang kalau user menekan tombol "Reset Semua".
+  const { slots, setSlots, ranked, setRanked, analyzeError, setAnalyzeError, resetAll } = useTalentPointSystem()
   const [analyzing, setAnalyzing] = useState(false)
-  const [ranked, setRanked] = useState(null)
-  const [analyzeError, setAnalyzeError] = useState(null)
 
   useEffect(() => {
     let alive = true
@@ -478,9 +700,7 @@ function TalentPointSystemTab() {
     setSlots((prev) => { const idx = prev.indexOf(null); if (idx < 0) return prev; const next = [...prev]; next[idx] = ''; return next })
   }
   function handleResetAll() {
-    setSlots(['', '', null, null, null])
-    setRanked(null)
-    setAnalyzeError(null)
+    resetAll()
   }
 
   const profiles = useMemo(
@@ -605,10 +825,29 @@ function TalentPointSystemTab() {
 // ════════════════════════════════════════
 export default function TalentPointSystem() {
   const [tab, setTab] = useState('tps')
+  const topbarRef = useRef(null)
+  const [topbarH, setTopbarH] = useState(49)
+
+  // Ukur tinggi .topbar secara dinamis (bisa beda-beda di mobile/desktop) supaya
+  // header + thead yang di-freeze di tab Formula bisa nempel persis di bawahnya,
+  // bukan pakai angka px yang di-hardcode (rawan geser/overlap kalau CSS berubah).
+  useEffect(() => {
+    const el = topbarRef.current
+    if (!el) return
+    const update = () => setTopbarH(el.offsetHeight)
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    window.addEventListener('resize', update)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', update)
+    }
+  }, [])
 
   return (
-    <div>
-      <div className="topbar">
+    <div style={{ '--tps-topbar-h': `${topbarH}px` }}>
+      <div className="topbar" ref={topbarRef}>
         <div className={`top-tab${tab === 'tps' ? ' active' : ''}`} onClick={() => setTab('tps')}>
           <Icon name="users" size={14} />
           Talent Point System

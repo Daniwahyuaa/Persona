@@ -27,11 +27,12 @@ export default function Topbar({ tabs, activeTab, onSelectTab, icon, title, extr
   }
 
   return (
-    <div className="topbar" style={{ padding: '0 28px', gap: 4 }}>
+    <div className="topbar" style={{ padding: '0 28px', gap: 4, justifyContent: extra ? 'space-between' : 'flex-start' }}>
       <div className="topbar-simple-title">
         {icon && <Icon name={icon} size={14} strokeWidth={2} style={{ color: 'var(--accent)' }} />}
         <span>{title}</span>
       </div>
+      {extra}
     </div>
   )
 }

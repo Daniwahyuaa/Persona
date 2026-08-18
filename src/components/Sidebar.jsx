@@ -42,6 +42,9 @@ export default function Sidebar({
           <div className="logo-inner">
             <img src={theme === 'dark' ? logoWhite : logoColor} alt="Persona" />
           </div>
+          {!collapsed && (
+            <div className="logo-greeting">Halo, <strong>{nama}</strong></div>
+          )}
         </div>
 
         <nav className="nav">

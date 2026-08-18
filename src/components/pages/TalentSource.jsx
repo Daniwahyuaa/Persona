@@ -12,6 +12,8 @@ import {
   normalizeJK,
   normalizePendidikan,
   fmtTgl,
+  fmtTglAngka,
+  diffHariKadaluarsa,
   scoreColor,
   DEV_LEVEL_CFG,
   PROJ_LEVEL_CFG,
@@ -36,6 +38,32 @@ function NbBadge({ v }) {
 
 function Dash() {
   return <span style={{ color: 'var(--dim)', fontSize: 11 }}>—</span>
+}
+
+// ── Sel Masa Kadaluarsa: tanggal + badge "lebih N hari" (sudah lewat) / "kurang N hari" (sisa waktu) ──
+function KadaluarsaCell({ v }) {
+  const tgl = fmtTglAngka(v)
+  const info = diffHariKadaluarsa(v)
+  if (tgl === '—' || !info) return <Dash />
+  const isExpired = info.expired
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+      <span style={{ fontSize: 11, color: 'var(--dim)', whiteSpace: 'nowrap' }}>{tgl}</span>
+      <span
+        style={{
+          fontSize: 10,
+          fontWeight: 700,
+          padding: '1px 7px',
+          borderRadius: 4,
+          whiteSpace: 'nowrap',
+          background: isExpired ? '#fee2e2' : '#dcfce7',
+          color: isExpired ? '#991b1b' : '#166534',
+        }}
+      >
+        {isExpired ? `lebih ${info.days} hari` : `kurang ${info.days} hari`}
+      </span>
+    </div>
+  )
 }
 
 // ── Skor + mini progress bar (persis scoreBar() index.html) ──
@@ -168,42 +196,232 @@ function BarList({ labels, values, colors, showPct = true, dot = false }) {
   )
 }
 
-// ── Bar chart stacked "Tercatat vs Belum Ada" (pengganti Chart.js chart-rating-trend) ──
+// ── Donut mini (dipakai utk "Jenis Kelamin" & "Hasil Asesmen Terakhir" —
+// beda gaya dari BarList: proporsi digambar sbg lingkaran, bukan batang) ──
+function DonutSmall({ labels, values, colors, unitLabel = 'karyawan' }) {
+  const total = values.reduce((a, b) => a + b, 0)
+  if (!total) return <div style={{ color: 'var(--dim)', fontSize: 11.5 }}>Tidak ada data</div>
+  const R = 46
+  const CX = 58
+  const CY = 58
+  const STROKE = 17
+  const CIRC = 2 * Math.PI * R
+  let acc = 0
+  const segs = labels.map((label, i) => {
+    const val = values[i]
+    const frac = total ? val / total : 0
+    const dash = frac * CIRC
+    const seg = { label, val, pct: total ? Math.round(frac * 100) : 0, color: colors[i % colors.length], dasharray: `${dash} ${CIRC - dash}`, dashoffset: -acc }
+    acc += dash
+    return seg
+  })
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
+      <div style={{ position: 'relative', width: CX * 2, height: CY * 2, flexShrink: 0 }}>
+        <svg width={CX * 2} height={CY * 2} viewBox={`0 0 ${CX * 2} ${CY * 2}`}>
+          <circle cx={CX} cy={CY} r={R} fill="none" stroke="var(--bg3)" strokeWidth={STROKE} />
+          {segs.map((s) => (
+            <circle
+              key={s.label} cx={CX} cy={CY} r={R} fill="none" stroke={s.color} strokeWidth={STROKE}
+              strokeDasharray={s.dasharray} strokeDashoffset={s.dashoffset} transform={`rotate(-90 ${CX} ${CY})`}
+              strokeLinecap="butt" style={{ transition: 'stroke-dasharray .3s ease' }}
+            />
+          ))}
+        </svg>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+          <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', lineHeight: 1 }}>{total}</div>
+          <div style={{ fontSize: 8.5, color: 'var(--muted)', marginTop: 2 }}>{unitLabel}</div>
+        </div>
+      </div>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {segs.map((s) => (
+          <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+            <span style={{ width: 9, height: 9, borderRadius: '50%', background: s.color, flexShrink: 0 }} />
+            <span style={{ flex: 1, fontSize: 11.5, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={s.label}>
+              {s.label}
+            </span>
+            <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--text)' }}>{s.val}</span>
+            <span style={{ fontSize: 10, color: 'var(--dim)', minWidth: 30, textAlign: 'right' }}>{s.pct}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Bulatkan angka maksimum sumbu-Y ke kelipatan rapi (dipakai ColumnChart).
+function niceColMax(v) {
+  if (v <= 5) return 5
+  const magnitude = Math.pow(10, Math.floor(Math.log10(v)))
+  return Math.ceil(v / magnitude) * magnitude
+}
+
+// ── Chart kolom vertikal (dipakai utk "Usia" & "Level Jabatan" — beda gaya
+// dari bar horizontal: batang berdiri + sumbu Y bergaris grid) ──
+function ColumnChart({ labels, values, colors }) {
+  const max = Math.max(...values, 0)
+  if (!max) return <div style={{ color: 'var(--dim)', fontSize: 11.5 }}>Tidak ada data</div>
+  const axisMax = niceColMax(max)
+  const AREA_H = 118
+  const ticks = [0, 1, 2, 3, 4].map((i) => Math.round((axisMax / 4) * i))
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: AREA_H, flexShrink: 0 }}>
+          {[...ticks].reverse().map((t) => (
+            <span key={t} style={{ fontSize: 9, color: 'var(--dim)', textAlign: 'right', minWidth: 14, lineHeight: 1 }}>{t}</span>
+          ))}
+        </div>
+        <div style={{ flex: 1, height: AREA_H, borderLeft: '1px solid var(--border)', paddingLeft: 8, position: 'relative' }}>
+          {ticks.map((t) => (
+            <div key={t} style={{ position: 'absolute', left: 8, right: 0, bottom: `${(t / axisMax) * AREA_H}px`, borderTop: '1px dashed var(--border)' }} />
+          ))}
+          <div style={{ position: 'absolute', left: 8, right: 0, bottom: 0, display: 'flex', alignItems: 'flex-end', gap: 10, height: '100%' }}>
+            {values.map((v, i) => {
+              const h = axisMax ? (v / axisMax) * AREA_H : 0
+              return (
+                <div key={labels[i]} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: '100%' }}>
+                  <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--text)', marginBottom: 3 }}>{v}</span>
+                  <div style={{ width: '58%', height: h || 2, background: colors[i % colors.length], borderRadius: '5px 5px 0 0', transition: 'height .25s' }} />
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 10, marginTop: 6, paddingLeft: 8 + 14 + 8 }}>
+        {labels.map((l) => (
+          <span key={l} style={{ flex: 1, textAlign: 'center', fontSize: 9.5, color: 'var(--muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={l}>
+            {l}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Bar tunggal tersegmentasi + legend (dipakai utk "Pendidikan" — beda
+// gaya dari bar horizontal per-kategori: satu batang penuh dibagi proporsi) ──
+function SegmentedBar({ labels, values, colors }) {
+  const total = values.reduce((a, b) => a + b, 0)
+  if (!total) return <div style={{ color: 'var(--dim)', fontSize: 11.5 }}>Tidak ada data</div>
+  return (
+    <div>
+      <div style={{ display: 'flex', width: '100%', height: 16, borderRadius: 8, overflow: 'hidden', marginBottom: 14, background: 'var(--bg3)' }}>
+        {labels.map((lbl, i) => {
+          const w = (values[i] / total) * 100
+          if (!w) return null
+          return <div key={lbl} title={`${lbl}: ${values[i]}`} style={{ width: `${w}%`, background: colors[i % colors.length] }} />
+        })}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {labels.map((lbl, i) => (
+          <div key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ width: 9, height: 9, borderRadius: 2, background: colors[i % colors.length], flexShrink: 0 }} />
+            <span style={{ flex: 1, fontSize: 12, color: 'var(--text)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={lbl}>
+              {lbl}
+            </span>
+            <span style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--text)' }}>{values[i]}</span>
+            <span style={{ fontSize: 10.5, color: 'var(--dim)', minWidth: 32, textAlign: 'right' }}>
+              {total ? Math.round((values[i] / total) * 100) : 0}%
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Daftar peringkat + badge nomor (dipakai utk "Kategori 9-Box" — beda
+// gaya dari bar horizontal biasa: diurutkan besar→kecil, badge bulat nomor
+// urut, tanpa titik warna/persentase) ──
+function RankedList({ labels, values, colors }) {
+  const entries = labels.map((label, i) => ({ label, value: values[i], color: colors[i % colors.length] }))
+  const total = entries.reduce((a, e) => a + e.value, 0)
+  if (!total) return <div style={{ color: 'var(--dim)', fontSize: 11.5 }}>Tidak ada data</div>
+  const sorted = [...entries].sort((a, b) => b.value - a.value)
+  const max = Math.max(...sorted.map((e) => e.value), 1)
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {sorted.map((e, i) => (
+        <div key={e.label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ width: 20, height: 20, borderRadius: '50%', background: e.color, color: '#fff', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            {i + 1}
+          </span>
+          <span style={{ width: 108, flexShrink: 0, fontSize: 11.5, color: 'var(--text)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={e.label}>
+            {e.label}
+          </span>
+          <div style={{ flex: 1, height: 8, background: 'var(--bg3)', borderRadius: 4, overflow: 'hidden', minWidth: 0 }}>
+            <div style={{ height: '100%', width: `${(e.value / max) * 100}%`, background: e.color, borderRadius: 4 }} />
+          </div>
+          <span style={{ width: 26, flexShrink: 0, fontSize: 12.5, fontWeight: 800, color: 'var(--text)', textAlign: 'right' }}>{e.value}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+
+// CATATAN PERBAIKAN BUG: sebelumnya garis grid (gridline) sumbu-Y digambar dengan
+// offset tambahan +20px (menyisakan ruang untuk label bawah), sedangkan kolom bar
+// di-anchor ke dasar (bottom) area plot TANPA offset itu. Akibatnya posisi "0" pada
+// gridline tidak pernah benar-benar berhimpit dengan dasar bar, sehingga tinggi bar
+// selalu terlihat lebih pendek ~20px dari yang seharusnya dan proporsinya meleset
+// dari angka yang ditampilkan (mis. bar terlihat sama tinggi utk 2023/2024/2025
+// walau angkanya beda). Perbaikannya: area plot & label sumbu dipisah total dari
+// area bar, dan bar+gridline sama-sama diukur relatif terhadap AREA_H yang sama
+// (tanpa offset tersembunyi), lalu label tahun diletakkan di baris terpisah di
+// bawah (bukan absolute-positioned di dalam area plot).
 function TrenRatingChart({ data }) {
   const max = Math.max(...data.map((d) => d.withRating + d.without), 1)
   const step = Math.max(1, Math.ceil(max / 5))
   const axisMax = step * 5
   const ticks = [0, 1, 2, 3, 4, 5].map((i) => i * step)
-  const H = 150
+  const AREA_H = 150 // tinggi area plot murni (grid + bar), tanpa dicampur ruang label
 
   return (
     <div>
       <div style={{ display: 'flex', gap: 10 }}>
-        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: H, paddingBottom: 20 }}>
+        {/* Label sumbu-Y — tingginya sama persis (AREA_H) dan sejajar dg area plot */}
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: AREA_H, flexShrink: 0 }}>
           {[...ticks].reverse().map((t) => (
-            <span key={t} style={{ fontSize: 9.5, color: 'var(--dim)', textAlign: 'right', minWidth: 16 }}>{t}</span>
+            <span key={t} style={{ fontSize: 9.5, color: 'var(--dim)', textAlign: 'right', minWidth: 16, lineHeight: 1 }}>{t}</span>
           ))}
         </div>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', gap: 18, height: H, borderLeft: '1px solid var(--border)', paddingLeft: 10, position: 'relative' }}>
+
+        {/* Area plot: gridline & bar diukur dari basis yang sama (bottom:0 = nilai 0) */}
+        <div style={{ flex: 1, height: AREA_H, borderLeft: '1px solid var(--border)', paddingLeft: 10, position: 'relative' }}>
           {ticks.map((t) => (
-            <div key={t} style={{ position: 'absolute', left: 10, right: 0, bottom: `${20 + (t / axisMax) * (H - 20)}px`, borderTop: '1px dashed var(--border)' }} />
+            <div
+              key={t}
+              style={{ position: 'absolute', left: 10, right: 0, bottom: `${(t / axisMax) * AREA_H}px`, borderTop: '1px dashed var(--border)' }}
+            />
           ))}
-          {data.map((d) => {
-            const total = d.withRating + d.without
-            const totalH = (total / axisMax) * (H - 20)
-            const withH = total ? (d.withRating / total) * totalH : 0
-            return (
-              <div key={d.tahun} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: H - 20, position: 'relative', zIndex: 1 }}>
-                <div style={{ width: '60%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: totalH || 1 }}>
-                  <div style={{ height: totalH - withH, background: '#e5e7eb', borderRadius: withH > 0 ? '0' : '4px 4px 0 0' }} />
-                  <div style={{ height: withH, background: '#1a6e3c', borderRadius: '4px 4px 0 0' }} />
+          <div style={{ position: 'absolute', left: 10, right: 0, bottom: 0, display: 'flex', alignItems: 'flex-end', gap: 18, height: '100%' }}>
+            {data.map((d) => {
+              const total = d.withRating + d.without
+              const totalH = (total / axisMax) * AREA_H
+              const withH = total ? (d.withRating / total) * totalH : 0
+              return (
+                <div key={d.tahun} style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+                  <div style={{ width: '60%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: totalH || 1 }}>
+                    <div style={{ height: totalH - withH, background: '#e5e7eb', borderRadius: withH > 0 ? '0' : '4px 4px 0 0' }} />
+                    <div style={{ height: withH, background: '#1a6e3c', borderRadius: '4px 4px 0 0' }} />
+                  </div>
                 </div>
-                <span style={{ position: 'absolute', bottom: -20, fontSize: 11, color: 'var(--muted)' }}>{d.tahun}</span>
-              </div>
-            )
-          })}
+              )
+            })}
+          </div>
         </div>
       </div>
+
+      {/* Label tahun — baris terpisah di bawah area plot, bukan absolute di dalamnya */}
+      <div style={{ display: 'flex', gap: 18, marginTop: 6, paddingLeft: 10 + 16 + 10 }}>
+        {data.map((d) => (
+          <span key={d.tahun} style={{ flex: 1, textAlign: 'center', fontSize: 11, color: 'var(--muted)' }}>{d.tahun}</span>
+        ))}
+      </div>
+
       <div style={{ display: 'flex', gap: 16, justifyContent: 'center', marginTop: 12, fontSize: 10.5, color: 'var(--muted)' }}>
         <span><span style={{ display: 'inline-block', width: 9, height: 9, background: '#1a6e3c', borderRadius: 2, marginRight: 5 }} />Tercatat</span>
         <span><span style={{ display: 'inline-block', width: 9, height: 9, background: '#e5e7eb', borderRadius: 2, marginRight: 5 }} />Belum Ada</span>
@@ -264,6 +482,19 @@ function DynamicChart({ rows, isFiltered, onReset }) {
   })
   const latestTren = trenData[trenData.length - 1]
 
+  // ── Distribusi Performance Rating (perf_rating terkini per karyawan) ──
+  const prC = {}
+  rows.forEach((r) => {
+    const sv = fStr(r.perfRating)
+    const k = sv === '—' ? 'Belum Ada' : sv
+    prC[k] = (prC[k] || 0) + 1
+  })
+  const prKeys = [
+    ...Object.keys(prC).filter((k) => k !== 'Belum Ada').sort((a, b) => prC[b] - prC[a]),
+    ...(prC['Belum Ada'] ? ['Belum Ada'] : []),
+  ]
+  const prTopEntry = prKeys.find((k) => k !== 'Belum Ada')
+
   const CardHeader = ({ title }) => <div className="card-title">{title}</div>
 
   return (
@@ -286,11 +517,11 @@ function DynamicChart({ rows, isFiltered, onReset }) {
             <div style={{ fontSize: 11.5, color: 'var(--muted)', marginBottom: 10 }}>
               Total <strong style={{ color: 'var(--text)', fontSize: 14 }}>{jkEntries.reduce((a, [, v]) => a + v, 0)}</strong> karyawan
             </div>
-            <BarList labels={jkEntries.map(([k]) => k)} values={jkEntries.map(([, v]) => v)} colors={PALETTE} dot />
+            <DonutSmall labels={jkEntries.map(([k]) => k)} values={jkEntries.map(([, v]) => v)} colors={['#1a6e3c', '#1a4f7a', '#6b7280']} />
           </div>
           <div className="card">
             <CardHeader title="Usia" />
-            <BarList labels={Object.keys(uC)} values={Object.values(uC)} colors={['#8aa9c9', '#5f9c7e', '#d9a441', '#9b8fc4']} showPct={false} />
+            <ColumnChart labels={Object.keys(uC)} values={Object.values(uC)} colors={['#8aa9c9', '#5f9c7e', '#d9a441', '#fb6969']} />
           </div>
         </div>
         <div className="card">
@@ -298,7 +529,7 @@ function DynamicChart({ rows, isFiltered, onReset }) {
           <div style={{ fontSize: 11.5, color: 'var(--muted)', marginBottom: 10 }}>
             Jenjang terbanyak: <strong style={{ color: 'var(--text)' }}>{pKeys[0] || '—'}</strong>
           </div>
-          <BarList labels={pKeys} values={pKeys.map((k) => pC[k])} colors={PALETTE} dot />
+          <SegmentedBar labels={pKeys} values={pKeys.map((k) => pC[k])} colors={PALETTE} />
         </div>
         <div className="card">
           <CardHeader title="Tren Rating (2023–2025)" />
@@ -311,22 +542,113 @@ function DynamicChart({ rows, isFiltered, onReset }) {
 
         <div className="card">
           <CardHeader title="Kategori 9-Box" />
-          <BarList labels={nbKeys} values={nbKeys.map((k) => nC[k])} colors={['#1a6e3c', '#1a4f7a', '#d9a441', '#9b8fc4', '#c0392b', '#6b7280']} showPct={false} />
+          <RankedList labels={nbKeys} values={nbKeys.map((k) => nC[k])} colors={['#1a6e3c', '#1a4f7a', '#d9a441', '#fb6969', '#c0392b', '#6b7280']} />
         </div>
         <div className="card">
           <CardHeader title="Level Jabatan" />
-          <BarList labels={jbKeys} values={jbKeys.map((k) => jbC[k] || 0)} colors={['#4d8f7d', '#3f7fa8', '#9b8fc4', '#d9a441', '#c0392b', '#6b7280']} showPct={false} />
+          <ColumnChart labels={jbKeys} values={jbKeys.map((k) => jbC[k] || 0)} colors={['#4d8f7d', '#3f7fa8', '#fb6969', '#d9a441', '#c0392b', '#6b7280']} />
         </div>
         <div className="card">
           <CardHeader title="Hasil Asesmen Terakhir" />
-          <BarList labels={hasilKeys} values={hasilKeys.map((k) => hasilC[k])} colors={['#6b7280', '#1a6e3c', '#1a4f7a', '#c0392b', '#d9a441']} showPct={false} />
+          <DonutSmall labels={hasilKeys} values={hasilKeys.map((k) => hasilC[k])} colors={['#6b7280', '#1a6e3c', '#1a4f7a', '#c0392b', '#d9a441']} />
+        </div>
+      </div>
+
+      {/* Distribusi Performance Rating — dipisah jadi baris sendiri, lebar setengah
+          halaman (grid dua kolom, kartu hanya mengisi slot pertama), dengan desain
+          donut chart + legend (bukan BarList seperti kartu lain). */}
+      <div className="two-col">
+        <div className="card">
+          <CardHeader title="Distribusi Performance Rating" />
+          <div style={{ fontSize: 11.5, color: 'var(--muted)', margin: '2px 0 16px' }}>
+            Total <strong style={{ color: 'var(--text)', fontSize: 14 }}>{rows.length}</strong> karyawan · Rating terbanyak:{' '}
+            <strong style={{ color: 'var(--accent)' }}>{prTopEntry || '—'}</strong>
+          </div>
+          <PerfRatingDonut entries={prKeys.map((k) => [k, prC[k]])} />
         </div>
       </div>
     </div>
   )
 }
 
-const PALETTE = ['#1a6e3c', '#1a4f7a', '#d9a441', '#9b8fc4', '#c0392b', '#6b7280', '#0891b2', '#c2185b']
+// ── Donut chart "Distribusi Performance Rating" — desain baru (bukan BarList) ──
+function PerfRatingDonut({ entries }) {
+  const total = entries.reduce((a, [, v]) => a + v, 0)
+  const R = 74
+  const CX = 90
+  const CY = 90
+  const STROKE = 26
+  const CIRC = 2 * Math.PI * R
+
+  let acc = 0
+  const segs = entries.map(([label, val], i) => {
+    const frac = total ? val / total : 0
+    const dash = frac * CIRC
+    const seg = {
+      label,
+      val,
+      pct: total ? Math.round(frac * 100) : 0,
+      color: PALETTE[i % PALETTE.length],
+      dasharray: `${dash} ${CIRC - dash}`,
+      dashoffset: -acc,
+    }
+    acc += dash
+    return seg
+  })
+
+  if (!total) {
+    return <div style={{ color: 'var(--dim)', fontSize: 11.5 }}>Tidak ada data</div>
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 28, flexWrap: 'wrap' }}>
+      <div style={{ position: 'relative', width: CX * 2, height: CY * 2, flexShrink: 0 }}>
+        <svg width={CX * 2} height={CY * 2} viewBox={`0 0 ${CX * 2} ${CY * 2}`}>
+          <circle cx={CX} cy={CY} r={R} fill="none" stroke="var(--bg3)" strokeWidth={STROKE} />
+          {segs.map((s) => (
+            <circle
+              key={s.label}
+              cx={CX}
+              cy={CY}
+              r={R}
+              fill="none"
+              stroke={s.color}
+              strokeWidth={STROKE}
+              strokeDasharray={s.dasharray}
+              strokeDashoffset={s.dashoffset}
+              transform={`rotate(-90 ${CX} ${CY})`}
+              strokeLinecap="butt"
+              style={{ transition: 'stroke-dasharray .3s ease' }}
+            />
+          ))}
+        </svg>
+        <div
+          style={{
+            position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
+          }}
+        >
+          <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--text)', lineHeight: 1 }}>{total}</div>
+          <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 3 }}>karyawan</div>
+        </div>
+      </div>
+      <div style={{ flex: 1, minWidth: 180, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {segs.map((s) => (
+          <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+            <span style={{ width: 11, height: 11, borderRadius: 3, background: s.color, flexShrink: 0 }} />
+            <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {s.label}
+            </span>
+            <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text)', minWidth: 24, textAlign: 'right' }}>{s.val}</span>
+            <span style={{ fontSize: 11, color: 'var(--dim)', minWidth: 34, textAlign: 'right' }}>{s.pct}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const PALETTE = ['#1a6e3c', '#1a4f7a', '#d9a441', '#fb6969', '#c0392b', '#6b7280', '#0891b2', '#c2185b']
 
 function Pagination({ page, totalPages, onGoPage, extraLeft }) {
   const btnStyle = (active) => ({
@@ -467,7 +789,9 @@ function DatabaseTab({ rows }) {
       <DynamicChart rows={filtered} isFiltered={isFiltered} onReset={handleReset} />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, marginTop: 4 }}>
-        <div className="card-title-icon" style={{ background: '#dcfce7' }}>🗄️</div>
+        <div className="card-title-icon" style={{ background: '#dcfce7', color: '#166534' }}>
+          <Icon name="database" size={12} strokeWidth={2.4} />
+        </div>
         <span style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--muted)' }}>
           Database
         </span>
@@ -558,6 +882,7 @@ function DatabaseTab({ rows }) {
               <th style={{ textAlign: 'center' }}>Perf. Rating</th>
               <th style={{ textAlign: 'center' }}>Hasil Asesmen Terakhir</th>
               <th style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>Waktu Asesmen</th>
+              <th style={{ textAlign: 'center', whiteSpace: 'nowrap', minWidth: 100 }}>Masa Kadaluarsa</th>
               <th style={{ textAlign: 'center' }}>Lembaga Asesmen</th>
               <th style={{ textAlign: 'center' }}>Job Rotation</th>
               <th style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>Development</th>
@@ -587,7 +912,14 @@ function DatabaseTab({ rows }) {
                   <option value="&lt;70">&lt; 70</option>
                 </select>
               </th>
-              <th style={{ background: 'var(--bg3)' }}></th>
+              <th style={{ minWidth: 80, background: 'var(--bg3)', padding: '4px 6px' }}>
+                <select value={filters.cliHard || ''} onChange={(e) => setFilter('cliHard', e.target.value)} style={{ width: '100%', fontSize: 10.5 }}>
+                  <option value="">— Semua —</option>
+                  <option value="&gt;85">&gt; 85</option>
+                  <option value="70-85">70 – 85</option>
+                  <option value="&lt;70">&lt; 70</option>
+                </select>
+              </th>
               <th style={{ minWidth: 80, background: 'var(--bg3)', padding: '4px 6px' }}>
                 <select value={filters.kpi || ''} onChange={(e) => setFilter('kpi', e.target.value)} style={{ width: '100%', fontSize: 10.5 }}>
                   <option value="">— Semua —</option>
@@ -599,6 +931,20 @@ function DatabaseTab({ rows }) {
               <th style={{ background: 'var(--bg3)' }}></th>
               {filterCol(filterOptions.hasil_as, 'hasil_as', 110)}
               <th style={{ background: 'var(--bg3)' }}></th>
+              <th style={{ minWidth: 100, background: 'var(--bg3)', padding: '4px 6px' }}>
+                <select
+                  value={filters.kadaluarsa || ''}
+                  onChange={(e) => setFilter('kadaluarsa', e.target.value)}
+                  className={filters.kadaluarsa ? 'active-filter' : ''}
+                  style={{ width: '100%', fontSize: 10.5 }}
+                  title="Filter berdasarkan warna status Masa Kadaluarsa"
+                >
+                  <option value="">— Semua —</option>
+                  <option value="hijau">🟢 Masih berlaku</option>
+                  <option value="merah">🔴 Kadaluarsa</option>
+                  <option value="kosong">— Belum ada data</option>
+                </select>
+              </th>
               {filterCol(filterOptions.lmbg_as, 'lmbg_as', 110)}
               <th style={{ minWidth: 90, background: 'var(--bg3)', padding: '4px 6px' }}>
                 <select value={filters.jobrot || ''} onChange={(e) => setFilter('jobrot', e.target.value)} style={{ width: '100%', fontSize: 10.5 }}>
@@ -649,6 +995,7 @@ function DatabaseTab({ rows }) {
                     ) : <Dash />}
                   </td>
                   <td style={{ fontSize: 11, color: 'var(--dim)', textAlign: 'center', whiteSpace: 'nowrap' }}>{fmtTgl(r.waktuAs)}</td>
+                  <td style={{ textAlign: 'center' }}><KadaluarsaCell v={r.masaKadaluarsa} /></td>
                   <td style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'center' }}>{fStr(r.lmbgAs)}</td>
                   <td style={{ textAlign: 'center' }}>
                     <CountBadge n={r.jobRotCount} color={r.jobRotCount >= 3 ? 'var(--accent)' : r.jobRotCount === 2 ? 'var(--accent3)' : 'var(--accent2)'} />
@@ -666,7 +1013,7 @@ function DatabaseTab({ rows }) {
               )
             })}
             {pageList.length === 0 && (
-              <tr><td colSpan={25} style={{ textAlign: 'center', padding: 24, color: 'var(--dim)' }}>Tidak ada data yang cocok.</td></tr>
+              <tr><td colSpan={26} style={{ textAlign: 'center', padding: 24, color: 'var(--dim)' }}>Tidak ada data yang cocok.</td></tr>
             )}
           </tbody>
         </table>

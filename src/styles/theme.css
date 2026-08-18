@@ -19,11 +19,27 @@
   --radius-sm: 8px;
   --shadow: 0 1px 8px rgba(0, 0, 0, 0.07), 0 1px 3px rgba(0, 0, 0, 0.04);
   --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.1);
-  --font-b: 'Arial', sans-serif;
-  --font-d: 'Arial', sans-serif;
-  --font-m: 'Arial', sans-serif;
+  --font-b: 'Poppins', 'Arial', sans-serif;
+  --font-d: 'Poppins', 'Arial', sans-serif;
+  --font-m: 'Poppins', 'Arial', sans-serif;
   --title-bg: #055715;
   --title-text: #ffffff;
+
+  /* Efek "kaca" (glassmorphism/bokeh) untuk tabel */
+  --glass-bg: rgba(255, 255, 255, 0.32);
+  --glass-thead-bg: rgba(255, 255, 255, 0.6);
+  --glass-border: rgba(255, 255, 255, 0.55);
+  --glass-hover: rgba(255, 255, 255, 0.4);
+  --glass-shadow: 0 8px 28px rgba(20, 40, 30, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  --glass-blob-1: rgba(26, 110, 60, 0.28);
+  --glass-blob-2: rgba(217, 119, 6, 0.22);
+  --glass-blob-3: rgba(26, 79, 122, 0.2);
+  --glass-blob-4: rgba(124, 58, 237, 0.16);
+
+  /* Efek "kaca" untuk kartu/kolom (.card) di seluruh halaman — tetap terkesan
+     putih, tapi transparan & blur (bukan bokeh warna seperti tabel). */
+  --card-glass-bg: rgba(255, 255, 255, 0.6);
+  --card-glass-border: rgba(255, 255, 255, 0.65);
 }
 
 html[data-theme='dark'] {
@@ -47,17 +63,26 @@ html[data-theme='dark'] {
   --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.45);
   --title-bg: #ffffff;
   --title-text: #000000;
+
+  /* Efek "kaca" (glassmorphism/bokeh) untuk tabel — versi gelap */
+  --glass-bg: rgba(255, 255, 255, 0.045);
+  --glass-thead-bg: rgba(18, 22, 28, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.14);
+  --glass-hover: rgba(255, 255, 255, 0.075);
+  --glass-shadow: 0 8px 28px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --glass-blob-1: rgba(46, 168, 102, 0.22);
+  --glass-blob-2: rgba(230, 152, 43, 0.18);
+  --glass-blob-3: rgba(61, 127, 184, 0.18);
+  --glass-blob-4: rgba(155, 116, 242, 0.16);
+
+  /* Versi gelap: tetap "putih" secara relatif (abu-abu terang tipis di atas
+     latar gelap), transparan & blur, supaya kontras teks tetap terjaga. */
+  --card-glass-bg: rgba(255, 255, 255, 0.07);
+  --card-glass-border: rgba(255, 255, 255, 0.14);
 }
 
 html[data-theme='dark'] .sidebar-panel {
   background: #000000;
-}
-html[data-theme='dark'] .login-screen {
-  background: linear-gradient(135deg, #0a0d11, #12161c);
-}
-html[data-theme='dark'] .login-box {
-  background: #000000;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.55);
 }
 html[data-theme='dark'] .login-error {
   background: rgba(224, 87, 74, 0.15);

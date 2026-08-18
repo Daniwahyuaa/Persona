@@ -64,6 +64,49 @@ export function fmtTgl(v) {
   return `${dd}-${mmm}-${d.getFullYear()}`
 }
 
+/** Format tanggal dalam format angka penuh dd-mm-yyyy (dipakai utk Masa Kadaluarsa). */
+export function fmtTglAngka(v) {
+  if (!v || v === '—') return '—'
+  const d = new Date(String(v))
+  if (isNaN(d.getTime())) return String(v)
+  const dd = String(d.getDate()).padStart(2, '0')
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  return `${dd}-${mm}-${d.getFullYear()}`
+}
+
+/** Hitung tanggal masa kadaluarsa = tanggal asesmen + 2 tahun. */
+export function computeMasaKadaluarsa(waktuAs) {
+  if (!waktuAs || waktuAs === '—') return null
+  const d = new Date(String(waktuAs))
+  if (isNaN(d.getTime())) return null
+  d.setFullYear(d.getFullYear() + 2)
+  return d.toISOString()
+}
+
+/**
+ * Hitung selisih hari antara hari ini dan tanggal masa kadaluarsa.
+ * - expired=true  -> sudah lewat masa kadaluarsa ("lebih N hari")
+ * - expired=false -> belum lewat, masih berlaku ("kurang N hari" / sisa N hari)
+ * Perbandingan dilakukan per-hari (tanggal dinormalisasi ke 00:00) supaya hasilnya bulat.
+ */
+export function diffHariKadaluarsa(masaKadaluarsa) {
+  if (!masaKadaluarsa || masaKadaluarsa === '—') return null
+  const target = new Date(String(masaKadaluarsa))
+  if (isNaN(target.getTime())) return null
+  const today = new Date()
+  const t0 = new Date(target.getFullYear(), target.getMonth(), target.getDate())
+  const n0 = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const days = Math.round((t0 - n0) / 86400000)
+  return days >= 0 ? { expired: false, days } : { expired: true, days: Math.abs(days) }
+}
+
+/** Teks label "lebih N hari" (sudah kadaluarsa) / "kurang N hari" (masih berlaku, sisa N hari). */
+export function labelHariKadaluarsa(masaKadaluarsa) {
+  const info = diffHariKadaluarsa(masaKadaluarsa)
+  if (!info) return '—'
+  return info.expired ? `lebih ${info.days} hari` : `kurang ${info.days} hari`
+}
+
 // Level jabatan order: BOD-1, BOD-2, BOD-3, sisanya
 const JABATAN_ORDER = ['BOD-1', 'BOD-2', 'BOD-3']
 export function jabatanRank(j) {
@@ -256,6 +299,7 @@ export async function getTalentSourceData() {
       perfRating: kpiTerkini?.rating ?? null,
       hasilAs: asLatest?.hasil_asesmen ?? null,
       waktuAs: asLatest?.tanggal ?? null,
+      masaKadaluarsa: computeMasaKadaluarsa(asLatest?.tanggal ?? null),
       lmbgAs: asLatest?.lembaga ?? null,
       jobRotCount: nikToJobRot[nik] ?? null,
       dev: nikToDev[nik] || null,
@@ -322,6 +366,12 @@ export function filterDbRows(rows, { search = '', filters = {} } = {}) {
       if (filters.cli === '70-85' && !(s != null && s >= 70 && s <= 85)) return false
       if (filters.cli === '<70' && !(s != null && s < 70)) return false
     }
+    if (filters.cliHard) {
+      const s = r.cliHard
+      if (filters.cliHard === '>85' && !(s > 85)) return false
+      if (filters.cliHard === '70-85' && !(s != null && s >= 70 && s <= 85)) return false
+      if (filters.cliHard === '<70' && !(s != null && s < 70)) return false
+    }
     if (filters.kpi) {
       const s = r.kpiSkor != null ? parseFloat(r.kpiSkor) : null
       if (filters.kpi === '>85' && !(s > 85)) return false
@@ -334,6 +384,12 @@ export function filterDbRows(rows, { search = '', filters = {} } = {}) {
       if (filters.jobrot === '2' && jrc !== 2) return false
       if (filters.jobrot === '<5' && !(jrc != null && jrc < 5)) return false
       if (filters.jobrot === '>5' && !(jrc != null && jrc > 5)) return false
+    }
+    if (filters.kadaluarsa) {
+      const info = diffHariKadaluarsa(r.masaKadaluarsa)
+      if (filters.kadaluarsa === 'merah' && !(info && info.expired)) return false
+      if (filters.kadaluarsa === 'hijau' && !(info && !info.expired)) return false
+      if (filters.kadaluarsa === 'kosong' && info) return false
     }
     return true
   })
@@ -368,6 +424,8 @@ export const EXPORT_COLS = [
   { key: 'perf', label: 'Performance Rating' },
   { key: 'hasil_as', label: 'Hasil Asesmen Terakhir' },
   { key: 'waktu_as', label: 'Waktu Asesmen Terakhir' },
+  { key: 'masa_kadaluarsa', label: 'Masa Kadaluarsa' },
+  { key: 'status_kadaluarsa', label: 'Status Kadaluarsa (Hari)' },
   { key: 'lmbg_as', label: 'Lembaga Asesmen Terakhir' },
   { key: 'jobrot', label: 'Job Rotation' },
   { key: 'dev_alp', label: 'Development ALP' },
@@ -408,6 +466,8 @@ function buildExportObj(r, i, selectedCols) {
       case 'perf': obj[col.label] = fStr(r.perfRating); break
       case 'hasil_as': obj[col.label] = fStr(r.hasilAs); break
       case 'waktu_as': obj[col.label] = fStr(r.waktuAs); break
+      case 'masa_kadaluarsa': obj[col.label] = fmtTglAngka(r.masaKadaluarsa); break
+      case 'status_kadaluarsa': obj[col.label] = labelHariKadaluarsa(r.masaKadaluarsa); break
       case 'lmbg_as': obj[col.label] = fStr(r.lmbgAs); break
       case 'jobrot': obj[col.label] = r.jobRotCount != null ? r.jobRotCount : ''; break
       case 'dev_alp': obj[col.label] = r.dev?.counts?.alp || ''; break

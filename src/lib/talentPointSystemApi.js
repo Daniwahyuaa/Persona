@@ -15,7 +15,7 @@ const FORMULA_DEFAULT = [
   { key: 'pendidikan', bobot: 5, tiers: [
     { nilai: 'S3 / Doktor', poin: 100 }, { nilai: 'S2 / Master', poin: 80 },
     { nilai: 'S1 / Sarjana', poin: 60 }, { nilai: 'D3 / Diploma', poin: 40 },
-    { nilai: 'D1-D2 / SMA', poin: 20 },
+    { nilai: 'D3 Kebawah', poin: 20 },
   ]},
   { key: 'sanksi', bobot: 10, tiers: [
     { nilai: 'Tidak Ada Sanksi', poin: 100 }, { nilai: 'Ada Sanksi', poin: 0 },
