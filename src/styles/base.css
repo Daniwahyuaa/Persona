@@ -630,9 +630,18 @@ html:not([data-theme='dark']) .card-title {
   color: var(--muted);
 }
 .es-icon {
-  font-size: 34px;
-  margin-bottom: 9px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 12px;
+  background: var(--bg3);
+  color: var(--dim);
 }
+.es-icon.es-icon-danger { background: rgba(192, 57, 43, 0.1); color: var(--danger); }
+.es-icon.es-icon-accent { background: rgba(26, 110, 60, 0.1); color: var(--accent); }
 .es-title {
   font-size: 14px;
   font-weight: 700;
@@ -885,12 +894,57 @@ html, body {
 .stat-card.s-orange::after { background: var(--accent3); }
 .stat-card.s-red::after { background: var(--danger); }
 .stat-card.s-purple::after { background: var(--purple); }
-.stat-icon { font-size: 17px; margin-bottom: 3px; display: block; }
+.stat-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 7px;
+}
+.stat-card.s-green .stat-icon { background: rgba(26, 110, 60, 0.12); color: var(--accent); }
+.stat-card.s-blue .stat-icon { background: rgba(26, 79, 122, 0.12); color: var(--accent2); }
+.stat-card.s-orange .stat-icon { background: rgba(217, 119, 6, 0.14); color: var(--accent3); }
+.stat-card.s-red .stat-icon { background: rgba(192, 57, 43, 0.12); color: var(--danger); }
+.stat-card.s-purple .stat-icon { background: rgba(124, 58, 237, 0.12); color: var(--purple); }
 .stat-label { font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
 .stat-value { font-family: var(--font-d); font-size: 26px; line-height: 1; color: var(--text); }
 .stat-sub { font-size: 10px; color: var(--dim); margin-top: 2px; }
 
-.card-title-icon { width: 20px; height: 20px; border-radius: 5px; display: flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; }
+.card-title-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35), 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+/* Tombol "+" rata kanan di header kartu (mis. "Tambah Employee History") —
+   warna netral supaya tetap kontras di atas .card-title (hijau tua/putih). */
+.card-header-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px 5px 9px;
+  border-radius: 20px;
+  border: 1px solid rgba(127, 127, 127, 0.4);
+  background: rgba(127, 127, 127, 0.16);
+  color: inherit;
+  font-family: var(--font-b);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.13s, transform 0.13s;
+}
+.card-header-add-btn:hover { background: rgba(127, 127, 127, 0.28); }
+.card-header-add-btn:active { transform: scale(0.96); }
 
 .chart-wrap { height: 230px; position: relative; }
 .chart-wrap-sm { height: 180px; position: relative; }
@@ -1157,4 +1211,73 @@ tbody tr:hover td { background: var(--bg3); }
 
 .btn-logout {
   margin-bottom: 70px;
+}
+/* ══ COACHING SESSION — pencarian coachee (dibatasi Unit Kerja Coach) ══ */
+.coachee-search-dropdown {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  background: var(--card);
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.14);
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.coachee-search-empty {
+  padding: 10px 8px;
+  font-size: 11.5px;
+  color: var(--dim);
+  text-align: center;
+}
+
+/* ══ COACHING SESSION — label kartu Coachee ikut warna hijau aksen (sesuai
+   desain referensi), khusus di dalam grid field coachee ini saja — tidak
+   mengubah gaya .login-field di halaman lain (Login, Edit Profile, dst). ══ */
+.coachee-field-grid .login-field label {
+  color: var(--accent);
+  font-size: 10.5px;
+}
+
+/* Tombol "+ Tambah Topik Lain" — besar, hijau tua, rata kiri, sesuai desain
+   referensi (bukan lagi dropdown kecil di dalam field). Setiap klik
+   menambah 1 pasang baru field Topik Lain + Hasil Diskusinya. */
+.add-topik-lain-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 20px;
+  border-radius: 10px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-family: var(--font-b);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-bottom: 4px;
+  transition: opacity 0.13s, transform 0.13s;
+}
+.add-topik-lain-btn:hover { opacity: 0.92; }
+.add-topik-lain-btn:active { transform: scale(0.98); }
+
+/* Judul "COACHEE 1", "COACHEE 2", dst — sesuai desain referensi: teks
+   biasa (bukan badge/pill), tebal, huruf besar. */
+.coachee-block-title {
+  font-family: var(--font-b);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+@media (max-width: 720px) {
+  .coachee-field-grid { grid-template-columns: 1fr !important; }
 }

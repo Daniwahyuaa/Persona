@@ -96,7 +96,7 @@ export default function Inbox() {
             <div style={{ color: 'var(--muted)', fontSize: 12 }}>Memuat…</div>
           ) : rows.length === 0 ? (
             <div className="empty-state">
-              <div className="es-icon">📭</div>
+              <div className="es-icon"><Icon name="inbox" size={24} strokeWidth={2} /></div>
               <div className="es-title">Tidak ada permintaan</div>
               <div className="es-sub">Belum ada permintaan dengan status ini.</div>
             </div>

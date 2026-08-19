@@ -24,21 +24,44 @@ export const AKTIVITAS_OPTIONS = [
   'Lain-lain',
 ]
 
+/** Baris kosong baru untuk 1 pasang Topik Lain + Hasil Diskusinya (dipakai
+ *  saat "+ Tambah Topik Lain" diklik — 1 coachee bisa punya beberapa pasang). */
+export function emptyTopikLainRow() {
+  return {
+    _key: `topik-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    topik: TOPIK_LAIN_OPTIONS[0],
+    hasil_diskusi: '',
+  }
+}
+
 /** Baris coachee kosong baru, dipakai saat menambah baris di tabel form. */
 export function emptyCoacheeRow() {
   return {
     _key: `row-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    coachee_query: '',
     coachee_nik: '',
     coachee_nama: '',
     coachee_jabatan: '',
     waktu: '',
     evaluasi_kinerja: EVALUASI_KINERJA_OPTIONS[0],
     hasil_diskusi_kinerja: '',
-    topik_lain: TOPIK_LAIN_OPTIONS[0],
-    hasil_diskusi_topik: '',
+    // Topik Lain sekarang bisa lebih dari 1 pasang (Topik + Hasil Diskusinya
+    // sendiri-sendiri) -> disimpan sbg array di form. Saat disimpan, semua
+    // pasangan digabung jadi 1 kolom topik_lain ("A, B") dan 1 kolom
+    // hasil_diskusi_topik ("A: ...\nB: ...") supaya tidak perlu ubah skema tabel.
+    topikLainRows: [emptyTopikLainRow()],
     aktivitas: AKTIVITAS_OPTIONS[0],
     deskripsi_aktivitas: '',
   }
+}
+
+/** Pisah kembali string "A, B, C" dari kolom topik_lain jadi array, dipakai
+ *  saat menampilkan riwayat sesi coaching yang sudah tersimpan. */
+export function parseTopikLain(value) {
+  return String(value || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
 }
 
 /**
@@ -50,11 +73,44 @@ export async function getKaryawanByNik(nik) {
   if (!nikTrim) return null
   const { data, error } = await supabase
     .from('karyawan')
-    .select('nik, nama, posisi, usia')
+    .select('nik, nama, posisi, usia, unit_kerja')
     .eq('nik', nikTrim)
     .maybeSingle()
   if (error) throw error
   return data
+}
+
+// Ratakan string unit kerja supaya perbandingan tidak gagal cuma karena beda
+// besar/kecil huruf atau spasi ganda — data "Unit Kerja" hasil input manual
+// sering tidak 100% konsisten antar baris (mis. "HO Mkso Tebu" vs "HO MKSO
+// TEBU " dengan spasi nyangkut di akhir).
+function normalizeUnit(v) {
+  return String(v || '').trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+/**
+ * Cari karyawan (calon coachee) berdasarkan nama/NIK, DIBATASI ke satu Unit
+ * Kerja tertentu — coach hanya boleh mencari orang di unit kerjanya sendiri.
+ * Tanpa unitKerja (belum diketahui / kosong), sengaja tidak mengembalikan
+ * apa-apa supaya tidak bocor ke unit lain.
+ *
+ * Perbandingan unit kerja dilakukan di client (bukan `.eq()` di query) dan
+ * dinormalisasi (trim + lowercase + rapatkan spasi) supaya tetap cocok
+ * walau ada perbedaan kapitalisasi/spasi kecil pada data — ini penyebab
+ * paling umum kenapa hasil pencarian tampak kosong/nama tidak muncul
+ * walau orangnya sebenarnya ada di unit kerja yang sama.
+ */
+export async function searchKaryawanByUnitKerja(query, unitKerja) {
+  const unit = normalizeUnit(unitKerja)
+  const q = String(query || '').trim()
+  if (!unit) return []
+
+  let req = supabase.from('karyawan').select('nik, nama, posisi, unit_kerja').limit(200)
+  if (q) req = req.or(`nama.ilike.%${q}%,nik.ilike.%${q}%`)
+  const { data, error } = await req
+  if (error) throw error
+
+  return (data || []).filter((k) => normalizeUnit(k.unit_kerja) === unit).slice(0, 20)
 }
 
 /**
@@ -93,20 +149,27 @@ export async function saveCoachingSession({ header, coachees, userId }) {
 
   if (sessionError) throw sessionError
 
-  const payload = rows.map((r, idx) => ({
-    session_id: session.id,
-    coachee_nik: r.coachee_nik.trim(),
-    coachee_nama: r.coachee_nama.trim(),
-    coachee_jabatan: r.coachee_jabatan?.trim() || null,
-    waktu: r.waktu || null,
-    evaluasi_kinerja: r.evaluasi_kinerja || null,
-    hasil_diskusi_kinerja: r.hasil_diskusi_kinerja?.trim() || null,
-    topik_lain: r.topik_lain || null,
-    hasil_diskusi_topik: r.hasil_diskusi_topik?.trim() || null,
-    aktivitas: r.aktivitas || null,
-    deskripsi_aktivitas: r.deskripsi_aktivitas?.trim() || null,
-    urutan: idx,
-  }))
+  const payload = rows.map((r, idx) => {
+    const topikRows = (r.topikLainRows || []).filter((t) => t.topik || t.hasil_diskusi?.trim())
+    return {
+      session_id: session.id,
+      coachee_nik: r.coachee_nik.trim(),
+      coachee_nama: r.coachee_nama.trim(),
+      coachee_jabatan: r.coachee_jabatan?.trim() || null,
+      waktu: r.waktu || null,
+      evaluasi_kinerja: r.evaluasi_kinerja || null,
+      hasil_diskusi_kinerja: r.hasil_diskusi_kinerja?.trim() || null,
+      topik_lain: topikRows.map((t) => t.topik).filter(Boolean).join(', ') || null,
+      hasil_diskusi_topik:
+        topikRows
+          .filter((t) => t.hasil_diskusi?.trim())
+          .map((t) => `${t.topik}: ${t.hasil_diskusi.trim()}`)
+          .join('\n') || null,
+      aktivitas: r.aktivitas || null,
+      deskripsi_aktivitas: r.deskripsi_aktivitas?.trim() || null,
+      urutan: idx,
+    }
+  })
 
   const { error: coacheeError } = await supabase.from('coaching_session_coachees').insert(payload)
 

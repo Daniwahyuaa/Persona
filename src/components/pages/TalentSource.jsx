@@ -1070,27 +1070,27 @@ function AsesmenTab({ asesmen, rows }) {
         <div className="page-header-left"><h2>Asesmen</h2><p>Data asesmen terakhir per karyawan</p></div>
       </div>
       <div className="stats-grid">
-        <div className="stat-card s-green"><span className="stat-icon">📋</span><div className="stat-label">Total Event Asesmen</div><div className="stat-value">{filtered.length}</div></div>
-        <div className="stat-card s-blue"><span className="stat-icon">👥</span><div className="stat-label">Karyawan Dinilai</div><div className="stat-value">{uniqNik}</div></div>
-        <div className="stat-card s-orange"><span className="stat-icon">🏛️</span><div className="stat-label">Lembaga</div><div className="stat-value">{Object.keys(lembagaCount).length}</div></div>
+        <div className="stat-card s-green"><span className="stat-icon"><Icon name="checkSquare" size={15} strokeWidth={2.3} /></span><div className="stat-label">Total Event Asesmen</div><div className="stat-value">{filtered.length}</div></div>
+        <div className="stat-card s-blue"><span className="stat-icon"><Icon name="users" size={15} strokeWidth={2.3} /></span><div className="stat-label">Karyawan Dinilai</div><div className="stat-value">{uniqNik}</div></div>
+        <div className="stat-card s-orange"><span className="stat-icon"><Icon name="building" size={15} strokeWidth={2.2} /></span><div className="stat-label">Lembaga</div><div className="stat-value">{Object.keys(lembagaCount).length}</div></div>
       </div>
       <div className="two-col">
         <div className="card">
-          <div className="card-title"><div className="card-title-icon" style={{ background: '#dcfce7' }}>📊</div>Tipe Assessment</div>
+          <div className="card-title"><div className="card-title-icon" style={{ background: '#dcfce7', color: '#166534' }}><Icon name="barChart" size={12} strokeWidth={2.4} /></div>Tipe Assessment</div>
           <div style={{ padding: '14px 18px 18px' }}><BarList labels={Object.keys(tipeCount)} values={Object.values(tipeCount)} colors={PALETTE} /></div>
         </div>
         <div className="card">
-          <div className="card-title"><div className="card-title-icon" style={{ background: '#dbeafe' }}>🌟</div>Kategori 9-Box</div>
+          <div className="card-title"><div className="card-title-icon" style={{ background: '#dbeafe', color: '#1e40af' }}><Icon name="target" size={12} strokeWidth={2.4} /></div>Kategori 9-Box</div>
           <div style={{ padding: '14px 18px 18px' }}><BarList labels={Object.keys(nbCount)} values={Object.values(nbCount)} colors={PALETTE} /></div>
         </div>
       </div>
       <div className="two-col">
         <div className="card">
-          <div className="card-title"><div className="card-title-icon" style={{ background: '#fef3c7' }}>🏛️</div>Lembaga Assessment</div>
+          <div className="card-title"><div className="card-title-icon" style={{ background: '#fef3c7', color: '#92400e' }}><Icon name="book" size={12} strokeWidth={2.4} /></div>Lembaga Assessment</div>
           <div style={{ padding: '14px 18px 18px' }}><BarList labels={Object.keys(lembagaCount)} values={Object.values(lembagaCount)} colors={PALETTE} showPct={false} /></div>
         </div>
         <div className="card">
-          <div className="card-title"><div className="card-title-icon" style={{ background: '#ede9fe' }}>📅</div>Tahun Assessment</div>
+          <div className="card-title"><div className="card-title-icon" style={{ background: '#ede9fe', color: '#6d28d9' }}><Icon name="clock" size={12} strokeWidth={2.4} /></div>Tahun Assessment</div>
           <div style={{ padding: '14px 18px 18px' }}><BarList labels={Object.keys(tahunCount)} values={Object.values(tahunCount)} colors={PALETTE} showPct={false} /></div>
         </div>
       </div>
@@ -1144,18 +1144,18 @@ function CliTab({ cliSoft, rows }) {
         <div className="page-header-left"><h2>CLI — Competency Level Index</h2><p>Nilai kompetensi (soft &amp; hard) per karyawan</p></div>
       </div>
       <div className="stats-grid">
-        <div className="stat-card s-green"><span className="stat-icon">📊</span><div className="stat-label">Rerata Soft CLI</div><div className="stat-value">{avgSoft ?? '—'}</div></div>
-        <div className="stat-card s-blue"><span className="stat-icon">🛠️</span><div className="stat-label">Rerata Hard CLI</div><div className="stat-value">{avgHard ?? '—'}</div></div>
-        <div className="stat-card s-orange"><span className="stat-icon">👥</span><div className="stat-label">Karyawan Terukur</div><div className="stat-value">{rerataSoft.length}</div></div>
+        <div className="stat-card s-green"><span className="stat-icon"><Icon name="barChart" size={15} strokeWidth={2.3} /></span><div className="stat-label">Rerata Soft CLI</div><div className="stat-value">{avgSoft ?? '—'}</div></div>
+        <div className="stat-card s-blue"><span className="stat-icon"><Icon name="wrench" size={15} strokeWidth={2.2} /></span><div className="stat-label">Rerata Hard CLI</div><div className="stat-value">{avgHard ?? '—'}</div></div>
+        <div className="stat-card s-orange"><span className="stat-icon"><Icon name="users" size={15} strokeWidth={2.3} /></span><div className="stat-label">Karyawan Terukur</div><div className="stat-value">{rerataSoft.length}</div></div>
       </div>
       <div className="card">
-        <div className="card-title"><div className="card-title-icon" style={{ background: '#dbeafe' }}>📊</div>Rata-rata Nilai per Kompetensi (Soft CLI)</div>
+        <div className="card-title"><div className="card-title-icon" style={{ background: '#dbeafe', color: '#1e40af' }}><Icon name="barChart" size={12} strokeWidth={2.4} /></div>Rata-rata Nilai per Kompetensi (Soft CLI)</div>
         <div style={{ padding: '14px 18px 18px' }}>
           <BarList labels={perKompetensi.map((c) => c.nama)} values={perKompetensi.map((c) => c.pct)} colors={PALETTE} />
         </div>
       </div>
       <div className="card">
-        <div className="card-title"><div className="card-title-icon" style={{ background: '#dcfce7' }}>🔍</div>Filter &amp; Perbandingan per Kompetensi</div>
+        <div className="card-title"><div className="card-title-icon" style={{ background: '#dcfce7', color: '#166534' }}><Icon name="search" size={12} strokeWidth={2.4} /></div>Filter &amp; Perbandingan per Kompetensi</div>
         <div style={{ padding: '10px 18px 18px' }}>
           <div style={{ marginBottom: 10, fontSize: 12, color: 'var(--muted)' }}>Pilih kompetensi untuk melihat detail:</div>
           <div className="filter-chips">
@@ -1232,21 +1232,21 @@ function KpiTab({ rows }) {
         <div className="page-header-left"><h2>KPI — Key Performance Indicator</h2><p>Skor KPI karyawan (tahun terkini)</p></div>
       </div>
       <div className="stats-grid">
-        <div className="stat-card s-green"><span className="stat-icon">🎯</span><div className="stat-label">Karyawan Bernilai KPI</div><div className="stat-value">{filtered.length}</div></div>
-        <div className="stat-card s-blue"><span className="stat-icon">📈</span><div className="stat-label">Rerata Skor</div>
+        <div className="stat-card s-green"><span className="stat-icon"><Icon name="target" size={15} strokeWidth={2.3} /></span><div className="stat-label">Karyawan Bernilai KPI</div><div className="stat-value">{filtered.length}</div></div>
+        <div className="stat-card s-blue"><span className="stat-icon"><Icon name="trendingUp" size={15} strokeWidth={2.3} /></span><div className="stat-label">Rerata Skor</div>
           <div className="stat-value">{filtered.length ? Math.round(filtered.reduce((a, r) => a + parseFloat(r.kpiSkor), 0) / filtered.length) : '—'}</div>
         </div>
-        <div className="stat-card s-orange"><span className="stat-icon">🏆</span><div className="stat-label">Skor Tertinggi</div>
+        <div className="stat-card s-orange"><span className="stat-icon"><Icon name="crown" size={15} strokeWidth={2.2} /></span><div className="stat-label">Skor Tertinggi</div>
           <div className="stat-value">{top10[0]?.kpiSkor ?? '—'}</div>
         </div>
       </div>
       <div className="two-col">
         <div className="card">
-          <div className="card-title"><div className="card-title-icon" style={{ background: '#dcfce7' }}>📊</div>Distribusi Nilai KPI</div>
+          <div className="card-title"><div className="card-title-icon" style={{ background: '#dcfce7', color: '#166534' }}><Icon name="barChart" size={12} strokeWidth={2.4} /></div>Distribusi Nilai KPI</div>
           <div style={{ padding: '14px 18px 18px' }}><BarList labels={Object.keys(bins)} values={Object.values(bins)} colors={['#c0392b', '#d97706', '#1a6e3c']} /></div>
         </div>
         <div className="card">
-          <div className="card-title"><div className="card-title-icon" style={{ background: '#fef3c7' }}>🏆</div>Top 10 KPI Tertinggi</div>
+          <div className="card-title"><div className="card-title-icon" style={{ background: '#fef3c7', color: '#92400e' }}><Icon name="crown" size={12} strokeWidth={2.4} /></div>Top 10 KPI Tertinggi</div>
           <div style={{ padding: '14px 18px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
             {top10.map((r, i) => (
               <div key={r.nik} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
@@ -1260,7 +1260,7 @@ function KpiTab({ rows }) {
         </div>
       </div>
       <div className="card">
-        <div className="card-title"><div className="card-title-icon" style={{ background: '#dbeafe' }}>📈</div>Rata-rata KPI per Grup</div>
+        <div className="card-title"><div className="card-title-icon" style={{ background: '#dbeafe', color: '#1e40af' }}><Icon name="barChart" size={12} strokeWidth={2.4} /></div>Rata-rata KPI per Grup</div>
         <div style={{ padding: '14px 18px 18px' }}>
           <BarList labels={Object.keys(grupAvgFinal)} values={Object.values(grupAvgFinal)} colors={PALETTE} showPct={false} />
         </div>
@@ -1307,7 +1307,7 @@ function JobRotTab({ rows }) {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-        <div className="card-title-icon" style={{ background: '#dbeafe' }}>🔄</div>
+        <div className="card-title-icon" style={{ background: '#dbeafe', color: '#1e40af' }}><Icon name="refresh" size={12} strokeWidth={2.4} /></div>
         <span style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--muted)' }}>Job Rotation</span>
         <span className="count-badge">{list.length} karyawan pernah rotasi</span>
       </div>
@@ -1395,14 +1395,14 @@ export default function TalentSource() {
         <div className="page active">
           {state.loading && (
             <div className="empty-state">
-              <div className="es-icon">⏳</div>
+              <div className="es-icon"><Icon name="hourglass" size={24} strokeWidth={2} /></div>
               <div className="es-title">Memuat data…</div>
             </div>
           )}
 
           {!state.loading && state.error && (
             <div className="empty-state">
-              <div className="es-icon">⚠️</div>
+              <div className="es-icon es-icon-danger"><Icon name="alertTriangle" size={24} strokeWidth={2} /></div>
               <div className="es-title">Gagal memuat data</div>
               <div className="es-sub">{state.error.message || String(state.error)}</div>
             </div>
@@ -1410,7 +1410,7 @@ export default function TalentSource() {
 
           {!state.loading && !state.error && state.data && state.data.rows.length === 0 && (
             <div className="empty-state">
-              <div className="es-icon">🗄️</div>
+              <div className="es-icon"><Icon name="database" size={24} strokeWidth={2} /></div>
               <div className="es-title">Belum ada data Database</div>
               <div className="es-sub">Upload data karyawan terlebih dahulu (menu Upload Excel).</div>
             </div>

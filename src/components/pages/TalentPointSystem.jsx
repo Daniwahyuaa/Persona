@@ -247,7 +247,7 @@ function FormulaTab() {
         <div style={{ color: 'var(--muted)', fontSize: 12, padding: '16px 0' }}>Memuat formula…</div>
       ) : rows.length === 0 ? (
         <div className="empty-state" style={{ background: 'var(--card)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-          <div className="es-icon">⚖️</div>
+          <div className="es-icon"><Icon name="scale" size={24} strokeWidth={2} /></div>
           <div className="es-title">Belum ada data Formula</div>
           <div className="es-sub">Isi tabel <strong>formula</strong> di Supabase terlebih dahulu.</div>
         </div>
@@ -738,7 +738,7 @@ function TalentPointSystemTab() {
   if (!state.rows.length) {
     return (
       <div className="empty-state">
-        <div className="es-icon">⚡</div>
+        <div className="es-icon"><Icon name="zap" size={24} strokeWidth={2} /></div>
         <div className="es-title">Belum ada data</div>
         <div className="es-sub">Muat data dari Talent Source terlebih dahulu</div>
       </div>

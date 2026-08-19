@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Topbar from '../Topbar.jsx'
 import Icon from '../Icon.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
@@ -7,7 +7,9 @@ import {
   TOPIK_LAIN_OPTIONS,
   AKTIVITAS_OPTIONS,
   emptyCoacheeRow,
+  emptyTopikLainRow,
   getKaryawanByNik,
+  searchKaryawanByUnitKerja,
   saveCoachingSession,
   getMyCoachingSessions,
 } from '../../lib/coachingSessionApi.js'
@@ -62,6 +64,9 @@ const textareaStyle = {
 export default function CoachingSession({ onBack }) {
   const { user } = useAuth()
 
+  // Data Coach SEKARANG selalu ikut data pemilik akun yang login (sama
+  // seperti Talent Profile) dan tidak bisa diubah manual di form ini —
+  // supaya sesi coaching selalu tercatat atas nama coach yang benar.
   const [header, setHeader] = useState({
     unit_kerja: '',
     coach_nik: user?.nik || '',
@@ -69,6 +74,9 @@ export default function CoachingSession({ onBack }) {
     coach_jabatan: '',
     coach_usia: '',
   })
+  const [loadingCoach, setLoadingCoach] = useState(true)
+  const [coachError, setCoachError] = useState('')
+
   const [coachees, setCoachees] = useState([emptyCoacheeRow()])
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState('')
@@ -77,26 +85,82 @@ export default function CoachingSession({ onBack }) {
   const [loadingHistory, setLoadingHistory] = useState(true)
   const [openHistoryId, setOpenHistoryId] = useState(null)
 
-  // Auto-lookup data Coach (Jabatan & Usia) dari tabel karyawan begitu NIK
-  // sudah terisi (dari akun login), supaya coach tidak perlu isi manual.
+  // State untuk kotak pencarian coachee per baris (key = row._key), dibatasi
+  // ke Unit Kerja coach sendiri (lihat requirement #4).
+  const [coacheeSearch, setCoacheeSearch] = useState({})
+  const searchTimers = useRef({})
+
+  // Muat data diri Coach (Nama, Unit Kerja, Jabatan, Usia) dari tabel
+  // karyawan berdasarkan NIK akun yang login — dikunci, tidak bisa diubah
+  // dari form ini (samakan dengan Talent Profile: data diri = milik akun).
   useEffect(() => {
-    if (!header.coach_nik) return
+    if (!user?.nik) {
+      setLoadingCoach(false)
+      setCoachError('NIK belum terhubung ke akun Anda — hubungi admin agar bisa mengisi Coaching Session.')
+      return
+    }
     let active = true
-    getKaryawanByNik(header.coach_nik)
+    setLoadingCoach(true)
+    setCoachError('')
+    getKaryawanByNik(user.nik)
       .then((k) => {
-        if (!active || !k) return
-        setHeader((h) => ({
-          ...h,
-          coach_jabatan: h.coach_jabatan || k.posisi || '',
-          coach_usia: h.coach_usia || (k.usia != null ? String(k.usia) : ''),
-        }))
+        if (!active) return
+        if (!k) {
+          setCoachError('Data karyawan untuk NIK Anda tidak ditemukan — hubungi admin.')
+          return
+        }
+        setHeader({
+          unit_kerja: k.unit_kerja || '',
+          coach_nik: user.nik,
+          coach_nama: k.nama || user?.nama || '',
+          coach_jabatan: k.posisi || '',
+          coach_usia: k.usia != null ? String(k.usia) : '',
+        })
       })
-      .catch(() => {})
+      .catch((e) => active && setCoachError(e.message || 'Gagal memuat data Coach.'))
+      .finally(() => active && setLoadingCoach(false))
     return () => {
       active = false
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [user?.nik])
+
+  // ── Cari Coachee (dibatasi ke Unit Kerja Coach sendiri) ──────────────
+  function setRowSearch(key, patch) {
+    setCoacheeSearch((s) => ({ ...s, [key]: { ...(s[key] || {}), ...patch } }))
+  }
+
+  // Jalankan pencarian (dipakai baik saat mengetik maupun saat field
+  // difokuskan pertama kali, supaya coach bisa langsung lihat daftar
+  // orang di unit kerjanya sendiri tanpa perlu tahu nama persis dulu).
+  function runCoacheeSearch(key, value) {
+    clearTimeout(searchTimers.current[key])
+    setRowSearch(key, { loading: true, open: true })
+    searchTimers.current[key] = setTimeout(async () => {
+      try {
+        const rows = await searchKaryawanByUnitKerja(value, header.unit_kerja)
+        setRowSearch(key, { results: rows, loading: false })
+      } catch {
+        setRowSearch(key, { results: [], loading: false })
+      }
+    }, 250)
+  }
+
+  function handleCoacheeQueryChange(idx, key, value) {
+    updateCoachee(idx, { coachee_query: value, coachee_nik: '', coachee_nama: '', coachee_jabatan: '' })
+    runCoacheeSearch(key, value)
+  }
+
+  function handleCoacheeFocus(idx, key, value) {
+    // Fokus pertama kali (belum ketik apa-apa) -> tampilkan daftar orang di
+    // Unit Kerja sendiri langsung, tanpa perlu menunggu user mengetik dulu.
+    if (!coacheeSearch[key]?.results?.length) runCoacheeSearch(key, value)
+    else setRowSearch(key, { open: true })
+  }
+
+  function selectCoacheeResult(idx, key, r) {
+    updateCoachee(idx, { coachee_query: r.nama, coachee_nik: r.nik, coachee_nama: r.nama || '', coachee_jabatan: r.posisi || '' })
+    setRowSearch(key, { open: false })
+  }
 
   function loadHistory() {
     setLoadingHistory(true)
@@ -122,18 +186,31 @@ export default function CoachingSession({ onBack }) {
     setCoachees((rows) => (rows.length <= 1 ? rows : rows.filter((_, i) => i !== idx)))
   }
 
-  // Begitu NIK SAP Coachee selesai diketik (blur), coba autofill Nama &
-  // Jabatan dari tabel karyawan supaya coach tidak perlu ketik manual.
-  async function handleCoacheeNikBlur(idx, nik) {
-    if (!nik?.trim()) return
-    try {
-      const k = await getKaryawanByNik(nik)
-      if (k) {
-        updateCoachee(idx, { coachee_nama: k.nama || '', coachee_jabatan: k.posisi || '' })
-      }
-    } catch {
-      /* biarkan diisi manual kalau lookup gagal */
-    }
+  // ── Topik Lain (bisa lebih dari 1 pasang Topik + Hasil Diskusinya) ────
+  function addTopikLainRow(idx) {
+    setCoachees((rows) =>
+      rows.map((r, i) => (i === idx ? { ...r, topikLainRows: [...r.topikLainRows, emptyTopikLainRow()] } : r))
+    )
+  }
+
+  function updateTopikLainRow(idx, topikKey, patch) {
+    setCoachees((rows) =>
+      rows.map((r, i) =>
+        i === idx
+          ? { ...r, topikLainRows: r.topikLainRows.map((t) => (t._key === topikKey ? { ...t, ...patch } : t)) }
+          : r
+      )
+    )
+  }
+
+  function removeTopikLainRow(idx, topikKey) {
+    setCoachees((rows) =>
+      rows.map((r, i) =>
+        i === idx && r.topikLainRows.length > 1
+          ? { ...r, topikLainRows: r.topikLainRows.filter((t) => t._key !== topikKey) }
+          : r
+      )
+    )
   }
 
   async function handleSave() {
@@ -166,119 +243,142 @@ export default function CoachingSession({ onBack }) {
 
    
 
-        {/* DATA COACH */}
-        <div className="card" style={{ maxWidth: 820 }}>
+        {/* DATA COACH — ikut data pemilik akun yang login, terkunci (tidak
+            bisa diubah dari form ini), sama seperti di Talent Profile. */}
+        <div className="card">
           <CardHeader icon="idCard" bg="rgba(26,110,60,.1)" color="var(--accent)">Data Coach</CardHeader>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))', gap: 10 }}>
-            <Field label="Unit Kerja">
-              <input
-                type="text"
-                value={header.unit_kerja}
-                onChange={(e) => setHeader((h) => ({ ...h, unit_kerja: e.target.value }))}
-                placeholder="Nama Unit Kerja / Divisi / Pabrik Gula"
-              />
-            </Field>
-            <Field label="NIK SAP Coach">
-              <input
-                type="text"
-                value={header.coach_nik}
-                onChange={(e) => setHeader((h) => ({ ...h, coach_nik: e.target.value }))}
-                placeholder="NIK SAP Coach"
-              />
-            </Field>
-            <Field label="Nama Coach">
-              <input
-                type="text"
-                value={header.coach_nama}
-                onChange={(e) => setHeader((h) => ({ ...h, coach_nama: e.target.value }))}
-                placeholder="Nama Coach"
-              />
-            </Field>
-            <Field label="Jabatan Coach">
-              <input
-                type="text"
-                value={header.coach_jabatan}
-                onChange={(e) => setHeader((h) => ({ ...h, coach_jabatan: e.target.value }))}
-                placeholder="Jabatan Coach"
-              />
-            </Field>
-            <Field label="Usia">
-              <input
-                type="number"
-                value={header.coach_usia}
-                onChange={(e) => setHeader((h) => ({ ...h, coach_usia: e.target.value }))}
-                placeholder="Usia Coach"
-              />
-            </Field>
-          </div>
+          {loadingCoach ? (
+            <div style={{ color: 'var(--muted)', fontSize: 12 }}>Memuat data Coach…</div>
+          ) : coachError ? (
+            <div style={{ color: 'var(--danger)', fontSize: 12 }}>{coachError}</div>
+          ) : (
+            <>
+              <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>
+                Data Coach di bawah ini mengikuti akun Anda yang sedang login dan{' '}
+                <strong>tidak bisa diubah</strong> dari form ini — sama seperti Data Diri di Talent Profile. Hubungi
+                admin/SDM Unit Kerja jika ada yang perlu diperbarui.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))', gap: 10 }}>
+                {[
+                  ['Unit Kerja', header.unit_kerja],
+                  ['NIK SAP Coach', header.coach_nik],
+                  ['Nama Coach', header.coach_nama],
+                  ['Jabatan Coach', header.coach_jabatan],
+                  ['Usia', header.coach_usia],
+                ].map(([label, value]) => (
+                  <div className="login-field" style={{ margin: 0 }} key={label}>
+                    <label>{label}</label>
+                    <div style={{ background: 'var(--bg3)', borderRadius: 8, padding: '9px 12px', marginTop: 5, fontSize: 13, color: 'var(--text)' }}>
+                      {value || '—'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
         {/* DATA COACHEE */}
-        <div className="card" style={{ maxWidth: 820 }}>
+        <div className="card">
           <CardHeader icon="users" bg="#dbeafe" color="#1e40af">Coachee & Hasil Diskusi</CardHeader>
           <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>
-            Isi NIK SAP Coachee — Nama & Jabatan akan otomatis terisi jika ditemukan di data karyawan.
+            Cari coachee lewat kolom pencarian — hasil dibatasi ke Unit Kerja Anda sendiri sebagai Coach. Nama &amp;
+            Jabatan otomatis terisi begitu salah satu hasil dipilih.
           </p>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
             {coachees.map((row, idx) => (
               <div
                 key={row._key}
-                style={{ border: '1.5px solid var(--border2)', borderRadius: 12, padding: 16, position: 'relative' }}
+                className="coachee-block"
+                style={idx > 0 ? { paddingTop: 24, borderTop: '1.5px dashed var(--border2)' } : undefined}
               >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }}>Coachee #{idx + 1}</div>
-                  {coachees.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeCoachee(idx)}
-                      title="Hapus coachee ini"
-                      style={{
-                        width: 26, height: 26, borderRadius: 7, border: '1px solid var(--border2)', background: 'var(--bg2)',
-                        color: 'var(--danger)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                      }}
-                    >
-                      <Icon name="trash" size={12} strokeWidth={2.4} />
-                    </button>
-                  )}
+                <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
+                  <div className="coachee-block-title">COACHEE {idx + 1}</div>
+                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10 }}>
+                    <Field label="Waktu">
+                      <input
+                        type="date"
+                        value={row.waktu}
+                        onChange={(e) => updateCoachee(idx, { waktu: e.target.value })}
+                        style={{ minWidth: 150 }}
+                      />
+                    </Field>
+                    {coachees.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeCoachee(idx)}
+                        title="Hapus coachee ini"
+                        style={{
+                          width: 34, height: 34, borderRadius: 8, border: '1px solid var(--border2)', background: 'var(--bg2)',
+                          color: 'var(--danger)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                        }}
+                      >
+                        <Icon name="trash" size={13} strokeWidth={2.4} />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))', gap: 10, marginBottom: 10 }}>
-                  <Field label="NIK SAP Coachee">
-                    <input
-                      type="text"
-                      value={row.coachee_nik}
-                      onChange={(e) => updateCoachee(idx, { coachee_nik: e.target.value })}
-                      onBlur={(e) => handleCoacheeNikBlur(idx, e.target.value)}
-                      placeholder="NIK SAP"
-                    />
+                <div className="coachee-field-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 10 }}>
+                  <Field label={`Cari Coachee (Unit Kerja: ${header.unit_kerja || '—'})`}>
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type="text"
+                        value={row.coachee_query}
+                        onChange={(e) => handleCoacheeQueryChange(idx, row._key, e.target.value)}
+                        onFocus={() => handleCoacheeFocus(idx, row._key, row.coachee_query)}
+                        onBlur={() => setTimeout(() => setRowSearch(row._key, { open: false }), 150)}
+                        placeholder={header.unit_kerja ? 'Ketik nama atau NIK…' : 'Menunggu Unit Kerja Coach…'}
+                        disabled={!header.unit_kerja}
+                        autoComplete="off"
+                      />
+                      {coacheeSearch[row._key]?.open && header.unit_kerja && (
+                        <div className="coachee-search-dropdown">
+                          {coacheeSearch[row._key]?.loading ? (
+                            <div className="coachee-search-empty">Mencari…</div>
+                          ) : (coacheeSearch[row._key]?.results || []).length > 0 ? (
+                            coacheeSearch[row._key].results.map((r) => (
+                              <div
+                                key={r.nik}
+                                className="tp-result-item"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => selectCoacheeResult(idx, row._key, r)}
+                              >
+                                <span>{r.nama} <span style={{ color: 'var(--dim)' }}>· {r.nik}</span></span>
+                                <span style={{ color: 'var(--dim)', fontSize: 11 }}>{r.posisi}</span>
+                              </div>
+                            ))
+                          ) : row.coachee_query ? (
+                            <div className="coachee-search-empty">Tidak ditemukan di Unit Kerja Anda.</div>
+                          ) : (
+                            <div className="coachee-search-empty">Belum ada data karyawan di Unit Kerja Anda.</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </Field>
                   <Field label="Nama Coachee">
                     <input
                       type="text"
                       value={row.coachee_nama}
-                      onChange={(e) => updateCoachee(idx, { coachee_nama: e.target.value })}
-                      placeholder="Nama"
+                      readOnly
+                      placeholder="Terisi otomatis dari hasil pencarian"
+                      style={{ background: 'var(--bg3)', color: 'var(--muted)' }}
                     />
                   </Field>
                   <Field label="Jabatan Coachee">
                     <input
                       type="text"
                       value={row.coachee_jabatan}
-                      onChange={(e) => updateCoachee(idx, { coachee_jabatan: e.target.value })}
-                      placeholder="Jabatan"
-                    />
-                  </Field>
-                  <Field label="Waktu">
-                    <input
-                      type="date"
-                      value={row.waktu}
-                      onChange={(e) => updateCoachee(idx, { waktu: e.target.value })}
+                      readOnly
+                      placeholder="Terisi otomatis dari hasil pencarian"
+                      style={{ background: 'var(--bg3)', color: 'var(--muted)' }}
                     />
                   </Field>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 10 }}>
+                <div className="coachee-field-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(160px,1fr) 2fr', gap: 10, marginBottom: 10, alignItems: 'start' }}>
                   <Field label="Evaluasi Kinerja">
                     <select
                       value={row.evaluasi_kinerja}
@@ -289,18 +389,7 @@ export default function CoachingSession({ onBack }) {
                       ))}
                     </select>
                   </Field>
-                  <Field label="Topik Lain">
-                    <select
-                      value={row.topik_lain}
-                      onChange={(e) => updateCoachee(idx, { topik_lain: e.target.value })}
-                    >
-                      {TOPIK_LAIN_OPTIONS.map((o) => (
-                        <option key={o} value={o}>{o}</option>
-                      ))}
-                    </select>
-                  </Field>
-
-                  <Field label="Hasil Diskusi (Evaluasi Kinerja)" span={2}>
+                  <Field label="Hasil Diskusi (Evaluasi Kinerja)">
                     <textarea
                       style={textareaStyle}
                       value={row.hasil_diskusi_kinerja}
@@ -308,16 +397,57 @@ export default function CoachingSession({ onBack }) {
                       placeholder="Diisi hasil diskusi terkait evaluasi kinerja"
                     />
                   </Field>
+                </div>
 
-                  <Field label="Hasil Diskusi (Topik Lain)" span={2}>
-                    <textarea
-                      style={textareaStyle}
-                      value={row.hasil_diskusi_topik}
-                      onChange={(e) => updateCoachee(idx, { hasil_diskusi_topik: e.target.value })}
-                      placeholder="Diisi hasil diskusi terkait topik lain"
-                    />
-                  </Field>
+                {/* TOPIK LAIN — bisa lebih dari 1 pasang (Topik + Hasil Diskusinya
+                    sendiri), tiap pasang ditambah lewat "+ Tambah Topik Lain" di
+                    bawah, sesuai desain referensi. */}
+                {row.topikLainRows.map((t, tIdx) => (
+                  <div
+                    className="coachee-field-grid"
+                    key={t._key}
+                    style={{ display: 'grid', gridTemplateColumns: 'minmax(160px,1fr) 2fr', gap: 10, marginBottom: 10, alignItems: 'start' }}
+                  >
+                    <Field label={tIdx === 0 ? 'Topik Lain' : `Topik Lain #${tIdx + 1}`}>
+                      <select
+                        value={t.topik}
+                        onChange={(e) => updateTopikLainRow(idx, t._key, { topik: e.target.value })}
+                      >
+                        {TOPIK_LAIN_OPTIONS.map((o) => (
+                          <option key={o} value={o}>{o}</option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="Hasil Diskusi (Topik Lain)">
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                        <textarea
+                          style={{ ...textareaStyle, flex: 1 }}
+                          value={t.hasil_diskusi}
+                          onChange={(e) => updateTopikLainRow(idx, t._key, { hasil_diskusi: e.target.value })}
+                          placeholder="Diisi hasil diskusi terkait topik lain"
+                        />
+                        {row.topikLainRows.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeTopikLainRow(idx, t._key)}
+                            title="Hapus topik ini"
+                            className="eh-icon-btn"
+                            style={{ marginTop: 6 }}
+                          >
+                            <Icon name="trash" size={12} strokeWidth={2.4} />
+                          </button>
+                        )}
+                      </div>
+                    </Field>
+                  </div>
+                ))}
 
+                <button type="button" onClick={() => addTopikLainRow(idx)} className="add-topik-lain-btn">
+                  <Icon name="plus" size={14} strokeWidth={2.8} />
+                  Tambah Topik Lain
+                </button>
+
+                <div className="coachee-field-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(160px,1fr) 2fr', gap: 10, marginTop: 20, alignItems: 'start' }}>
                   <Field label="Rencana Aktivitas">
                     <select
                       value={row.aktivitas}
@@ -356,7 +486,7 @@ export default function CoachingSession({ onBack }) {
         </div>
 
         {/* SIMPAN */}
-        <div className="card" style={{ maxWidth: 820, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           <button
             onClick={handleSave}
             disabled={saving}
@@ -373,7 +503,7 @@ export default function CoachingSession({ onBack }) {
         </div>
 
         {/* RIWAYAT */}
-        <div className="card" style={{ maxWidth: 820 }}>
+        <div className="card">
           <CardHeader icon="fileText" bg="#fef3c7" color="#92400e">Riwayat Sesi Coaching Saya</CardHeader>
           {loadingHistory ? (
             <p style={{ fontSize: 12, color: 'var(--muted)' }}>Memuat…</p>
@@ -415,7 +545,13 @@ export default function CoachingSession({ onBack }) {
                               <div style={{ marginBottom: 4 }}><strong>{c.evaluasi_kinerja}:</strong> {c.hasil_diskusi_kinerja}</div>
                             )}
                             {c.hasil_diskusi_topik && (
-                              <div style={{ marginBottom: 4 }}><strong>{c.topik_lain}:</strong> {c.hasil_diskusi_topik}</div>
+                              <div style={{ marginBottom: 4 }}>
+                                {c.hasil_diskusi_topik.split('\n').map((line, i) => (
+                                  <div key={i}>
+                                    <strong>{line.split(':')[0]}:</strong>{line.slice(line.indexOf(':') + 1)}
+                                  </div>
+                                ))}
+                              </div>
                             )}
                             {c.aktivitas && (
                               <div><strong>Rencana Aktivitas:</strong> {c.aktivitas} — {c.deskripsi_aktivitas}</div>

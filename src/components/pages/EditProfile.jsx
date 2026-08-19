@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Topbar from '../Topbar.jsx'
 import Icon from '../Icon.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
@@ -63,13 +63,16 @@ function StatusBox({ status }) {
 
 // Header kartu dengan ikon lingkaran berwarna, konsisten dengan pola
 // card-title-icon yang dipakai di halaman lain (Inbox, Kelola User, dst).
-function CardHeader({ icon, bg, color, children }) {
+// `action` opsional dipakai untuk tombol pintas (mis. "+ Tambah Baru") yang
+// muncul rata kanan di header, tanpa perlu ubah struktur judul.
+function CardHeader({ icon, bg, color, children, action }) {
   return (
     <div className="card-title" style={{ display: 'flex', alignItems: 'center' }}>
       <div className="card-title-icon" style={{ background: bg, color }}>
         <Icon name={icon} size={12} strokeWidth={2.4} />
       </div>
-      {children}
+      <span style={{ flex: 1 }}>{children}</span>
+      {action}
     </div>
   )
 }
@@ -111,6 +114,15 @@ export default function EditProfile() {
   const [deletingId, setDeletingId] = useState(null)
   const [deleteError, setDeleteError] = useState('')
   const [togglingId, setTogglingId] = useState(null)
+  const achievementInputRef = useRef(null)
+
+  // Tombol "+" di header kartu — geser layar ke baris form tambah riwayat
+  // (slot kosong berikutnya) lalu fokus ke input "Nama Kegiatan/Pencapaian",
+  // supaya user bisa langsung mulai mengisi tanpa scroll manual.
+  function focusAddHistoryRow() {
+    achievementInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    achievementInputRef.current?.focus()
+  }
 
   useEffect(() => {
     if (!user?.nik) {
@@ -373,7 +385,7 @@ export default function EditProfile() {
       <Topbar title="Edit Profile" />
       <div className="content" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {/* FOTO PROFIL */}
-        <div className="card" style={{ maxWidth: 640 }}>
+        <div className="card">
           <CardHeader icon="user" bg="#dbeafe" color="#1e40af">Foto Profil</CardHeader>
           {!user?.nik ? (
             <div style={{ color: '#dc2626', fontSize: 12 }}>
@@ -451,7 +463,7 @@ export default function EditProfile() {
         </div>
 
         {/* DATA DIRI */}
-        <div className="card" style={{ maxWidth: 640 }}>
+        <div className="card">
           <CardHeader icon="idCard" bg="#ede9fe" color="#6d28d9">Data Diri</CardHeader>
           {!user?.nik ? (
             <div style={{ color: '#dc2626', fontSize: 12 }}>
@@ -525,8 +537,27 @@ export default function EditProfile() {
         </div>
 
         {/* TAMBAH EMPLOYEE HISTORY */}
-        <div className="card" style={{ maxWidth: 820 }}>
-          <CardHeader icon="fileText" bg="#fef3c7" color="#92400e">Tambah Employee History</CardHeader>
+        <div className="card">
+          <CardHeader
+            icon="fileText"
+            bg="#fef3c7"
+            color="#92400e"
+            action={
+              slotsLeft > 0 ? (
+                <button
+                  type="button"
+                  onClick={focusAddHistoryRow}
+                  className="card-header-add-btn"
+                  title="Tambah riwayat baru"
+                >
+                  <Icon name="plus" size={13} strokeWidth={2.8} />
+                  Tambah Baru
+                </button>
+              ) : null
+            }
+          >
+            Tambah Employee History
+          </CardHeader>
           <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>
             Tambahkan riwayat pengembangan diri, keterlibatan proyek, atau penghargaan yang belum tercatat. Setelah
             disimpan, otomatis muncul di Talent Profile Anda. Setiap <strong>jenis</strong> (Development, Project
@@ -686,6 +717,7 @@ export default function EditProfile() {
                         </td>
                         <td>
                           <input
+                            ref={achievementInputRef}
                             type="text"
                             value={achievement}
                             onChange={(e) => setAchievement(e.target.value)}
@@ -737,7 +769,7 @@ export default function EditProfile() {
           <StatusBox status={deleteError} />
         </div>
 
-        <div className="card" style={{ maxWidth: 640, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           <button
             onClick={handleSaveAll}
             disabled={saving}

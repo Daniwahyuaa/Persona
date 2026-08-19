@@ -323,7 +323,7 @@ function UserListTab() {
 
         {error && (
           <div className="empty-state">
-            <div className="es-icon">⚠️</div>
+            <div className="es-icon es-icon-danger"><Icon name="alertTriangle" size={24} strokeWidth={2} /></div>
             <div className="es-title">Gagal memuat daftar user</div>
             <div className="es-sub">{error}</div>
           </div>
@@ -331,7 +331,7 @@ function UserListTab() {
 
         {rows && rows.length === 0 && (
           <div className="empty-state">
-            <div className="es-icon">👥</div>
+            <div className="es-icon"><Icon name="users" size={24} strokeWidth={2} /></div>
             <div className="es-title">Belum ada user lain yang bisa ditampilkan</div>
           </div>
         )}
@@ -460,7 +460,7 @@ function UploadUserTab() {
   return (
     <div className="page">
       <div className="card">
-        <div className="card-title"><div className="card-title-icon" style={{ background: '#dbeafe' }}>📤</div>Bulk Tambah User dari Excel</div>
+        <div className="card-title"><div className="card-title-icon" style={{ background: '#dbeafe', color: '#1e40af' }}><Icon name="upload2" size={12} strokeWidth={2.4} /></div>Bulk Tambah User dari Excel</div>
         <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>
           Upload file Excel berisi kolom <strong>USERNAME, NAMA, ROLE, PASSWORD</strong> (urutan bebas, huruf
           besar/kecil tidak masalah). Username yang sudah ada akan di-update, username baru otomatis ditambahkan.
@@ -478,7 +478,7 @@ function UploadUserTab() {
         </button>
         <div className="upload-zone" style={{ padding: 20 }}>
           <input type="file" accept=".xlsx,.xls,.xlsm,.csv" />
-          <div style={{ fontSize: 22, marginBottom: 4 }}>📊</div>
+          <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(26,110,60,.1)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 8px' }}><Icon name="upload2" size={20} strokeWidth={2.2} /></div>
           <div style={{ fontSize: 12.5, fontWeight: 700 }}>Klik atau drag &amp; drop file Excel/CSV</div>
           <div style={{ fontSize: 11, color: 'var(--muted)' }}>Kolom: USERNAME, NAMA, ROLE, PASSWORD</div>
         </div>
